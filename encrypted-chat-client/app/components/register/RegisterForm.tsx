@@ -17,13 +17,32 @@ export default function RegisterForm() {
     setError(null);
 
     try {
-      const res = await authApi.register({ username, email, password });
+      const res = await authApi.register({
+        username,
+        email,
+        password,
+      });
 
+      // 🔐 Store JWT
       localStorage.setItem("token", res.access_token);
 
+      // 🧠 Create unified identity (IMPORTANT for socket + UI)
+      localStorage.setItem(
+        "identity",
+        JSON.stringify({
+          userId: res.user?.id ?? crypto.randomUUID(),
+          username,
+          type: "auth",
+        }),
+      );
+
+      // optional cleanup (avoid guest conflict)
+      localStorage.removeItem("guest_username");
+
+      // 🚀 redirect
       window.location.href = "/";
     } catch (err) {
-      setError((err as Error).message);
+      setError((err as Error).message || "Registration failed");
     } finally {
       setLoading(false);
     }

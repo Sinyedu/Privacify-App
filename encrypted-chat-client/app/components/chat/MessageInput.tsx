@@ -2,29 +2,34 @@
 
 import { useState } from "react";
 import { useChatStore } from "@/core/store/chat-store";
-import { encrypt, decrypt } from "@/core/crypto/encryption";
-import { socket } from "@/core/socket/socket"
+import { encrypt } from "@/core/crypto/encryption";
+import { socket } from "@/core/socket/socket";
+import { useIdentity } from "@/app/context/IdentityContext";
 
-export default function MessageInput() {
+export default function MessageInput({ roomId }: { roomId: string }) {
   const [text, setText] = useState("");
-  const addMessage = useChatStore((s) => s.addMessage);
   const setDebug = useChatStore((s) => s.setDebug);
+
+  const { identity } = useIdentity();
+
+  const isGuest = identity?.type === "guest";
 
   const handleSend = () => {
     if (!text.trim()) return;
 
     const encrypted = encrypt(text);
-    const decrypted = decrypt(encrypted);
+    const sender = identity?.username;
 
-    // update debug panel
     setDebug({
       plaintext: text,
       encrypted,
     });
 
     socket.emit("send_message", {
+      roomId,
       text: encrypted,
-      sender: "You",
+      sender,
+      isGuest,
     });
 
     setText("");
@@ -42,10 +47,7 @@ export default function MessageInput() {
         }}
       />
 
-      <button
-        onClick={handleSend}
-        className="px-4 rounded bg-black text-white"
-      >
+      <button onClick={handleSend} className="px-4 rounded bg-black text-white">
         Send
       </button>
     </div>

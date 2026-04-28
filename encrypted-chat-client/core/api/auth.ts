@@ -1,27 +1,15 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-type AuthResponse = {
-  access_token: string;
-};
-
-const headers = {
-  "Content-Type": "application/json",
-};
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export const authApi = {
   login: async (data: { email: string; password: string }) => {
     const res = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.message || "Login failed");
-    }
-
-    return res.json() as Promise<AuthResponse>;
+    if (!res.ok) throw new Error("Login failed");
+    return res.json();
   },
 
   register: async (data: {
@@ -31,15 +19,11 @@ export const authApi = {
   }) => {
     const res = await fetch(`${API_URL}/auth/register`, {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.message || "Register failed");
-    }
-
-    return res.json() as Promise<AuthResponse>;
+    if (!res.ok) throw new Error("Register failed");
+    return res.json();
   },
 };

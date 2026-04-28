@@ -19,7 +19,7 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    return this.signToken(user.id, user.email);
+    return this.signToken(user.id, user.email, user.username);
   }
 
   async login(email: string, password: string) {
@@ -31,14 +31,15 @@ export class AuthService {
 
     if (!isValid) throw new UnauthorizedException('Invalid credentials');
 
-    return this.signToken(user.id, user.email);
+    return this.signToken(user.id, user.email, user.username);
   }
 
-  private signToken(userId: string, email: string) {
+  private signToken(userId: string, email: string, username: string) {
     return {
       access_token: this.jwtService.sign({
         sub: userId,
         email,
+        username,
       }),
     };
   }
