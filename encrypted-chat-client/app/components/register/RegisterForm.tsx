@@ -23,10 +23,8 @@ export default function RegisterForm() {
         password,
       });
 
-      // 🔐 Store JWT
       localStorage.setItem("token", res.access_token);
 
-      // 🧠 Create unified identity (IMPORTANT for socket + UI)
       localStorage.setItem(
         "identity",
         JSON.stringify({
@@ -36,10 +34,8 @@ export default function RegisterForm() {
         }),
       );
 
-      // optional cleanup (avoid guest conflict)
       localStorage.removeItem("guest_username");
 
-      // 🚀 redirect
       window.location.href = "/";
     } catch (err) {
       setError((err as Error).message || "Registration failed");

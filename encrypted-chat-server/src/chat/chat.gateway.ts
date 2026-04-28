@@ -148,7 +148,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const token = await this.inviteService.createInvite(data.roomId);
 
     client.emit('invite_created', {
-      link: `http://localhost:3000/invite/${token}`,
+      link: `${process.env.CLIENT_URL}/invite/${token}`,
     });
   }
 }

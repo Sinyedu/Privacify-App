@@ -7,7 +7,7 @@ export default function InvitePage() {
   const { token } = useParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-
+  const API_URL = process.env.NEXT_PUBLIC_API_URL!;
   useEffect(() => {
     async function run() {
       // 🔐 NEW UNIFIED IDENTITY SYSTEM
@@ -42,7 +42,7 @@ export default function InvitePage() {
       }
 
       try {
-        const res = await fetch(`http://localhost:3001/invite/${token}`);
+        const res = await fetch(`${API_URL}/invite/${token}`);
 
         const data = await res.json();
 
