@@ -4,10 +4,14 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
 } from '@nestjs/websockets';
+
 import { Server, Socket } from 'socket.io';
 import { MessageService } from '../messages/message.service';
 import { InviteService } from '../invite/invite.service';
+import { RoomService } from '../room/room.service';
 
 type Identity = {
   userId: string;
@@ -18,41 +22,60 @@ type Identity = {
 @WebSocketGateway({
   cors: {
     origin: 'http://localhost:3000',
+    credentials: true,
   },
 })
-export class ChatGateway {
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
   constructor(
     private readonly messageService: MessageService,
     private readonly inviteService: InviteService,
+    private readonly roomService: RoomService,
   ) {}
 
   handleConnection(client: Socket) {
-    console.log('[gateway] client connected:', client.id);
+    const rawIdentity = client.handshake.auth as Partial<Identity>;
 
-    const identity = client.handshake.auth as Identity;
+    console.log('[gateway] CONNECT:', client.id);
+    console.log('[gateway] auth payload:', rawIdentity);
 
-    console.log('[gateway] handshake:', identity);
+    const identity: Identity =
+      rawIdentity?.userId && rawIdentity?.username
+        ? (rawIdentity as Identity)
+        : {
+            userId: `anon_${client.id}`,
+            username: 'guest',
+            type: 'guest',
+          };
 
-    client.data.identity = identity?.userId
-      ? identity
-      : {
-          userId: 'anon_' + client.id,
-          username: 'anonymous',
-          type: 'guest',
-        };
+    client.data.identity = identity;
 
-    console.log('[gateway] identity:', client.data.identity.username);
+    console.log('[gateway] identity set:', identity.username);
   }
 
   handleDisconnect(client: Socket) {
-    console.log('[gateway] disconnected:', client.id);
+    console.log('[gateway] DISCONNECT:', client.id);
+  }
+
+  @SubscribeMessage('create_room')
+  async createRoom(
+    @MessageBody() data: { roomId: string; name: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const room = await this.roomService.createRoom(data.roomId, data.name);
+
+    const payload = {
+      roomId: room.roomId,
+      name: room.name,
+    };
+
+    this.server.emit('room_created', payload);
   }
 
   @SubscribeMessage('join_room')
-  async handleJoinRoom(
+  async joinRoom(
     @MessageBody() data: { roomId: string },
     @ConnectedSocket() client: Socket,
   ) {
@@ -67,8 +90,21 @@ export class ChatGateway {
     client.emit('chat_history', messages);
   }
 
+  @SubscribeMessage('get_rooms')
+  async getRooms(@ConnectedSocket() client: Socket) {
+    const rooms = await this.roomService.getRooms();
+
+    client.emit(
+      'rooms_list',
+      rooms.map((r) => ({
+        roomId: r.roomId,
+        name: r.name,
+      })),
+    );
+  }
+
   @SubscribeMessage('send_message')
-  async handleMessage(
+  async sendMessage(
     @MessageBody()
     payload: {
       roomId: string;
@@ -78,7 +114,12 @@ export class ChatGateway {
   ) {
     const identity = client.data.identity as Identity;
 
-    console.log('[gateway] send_message:', identity.username);
+    if (!identity) {
+      console.log('[gateway] blocked message (no identity)');
+      return;
+    }
+
+    console.log('[gateway] send_message:', identity.username, payload.roomId);
 
     const message = await this.messageService.create({
       roomId: payload.roomId,

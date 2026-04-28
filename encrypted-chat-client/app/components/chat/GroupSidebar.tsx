@@ -5,8 +5,21 @@ import { useState, useEffect } from "react";
 import { socket } from "@/core/socket/socket";
 import { useIdentity } from "@/app/context/IdentityContext";
 
+type Room = {
+  roomId: string;
+  name: string;
+};
+
 export default function GroupSidebar() {
   const { identity } = useIdentity();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const currentRoom = searchParams.get("room") || "general";
+
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [newRoom, setNewRoom] = useState("");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
   useEffect(() => {
     if (!identity) return;
@@ -17,36 +30,51 @@ export default function GroupSidebar() {
       socket.connect();
     }
   }, [identity]);
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const currentRoom = searchParams.get("room") || "general";
-
-  const [rooms, setRooms] = useState<string[]>(["general"]);
-  const [newRoom, setNewRoom] = useState("");
-
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!identity) return;
+
+    socket.emit("get_rooms");
+
+    const handleRooms = (data: Room[]) => {
+      setRooms(data);
+    };
+
+    const handleCreated = (room: Room) => {
+      setRooms((prev) => {
+        const exists = prev.some((r) => r.roomId === room.roomId);
+        if (exists) return prev;
+        return [...prev, room];
+      });
+    };
+
     const handleInvite = ({ link }: { link: string }) => {
+      console.log("[UI] invite received:", link);
       setInviteLink(link);
     };
 
+    socket.on("rooms_list", handleRooms);
+    socket.on("room_created", handleCreated);
     socket.on("invite_created", handleInvite);
 
     return () => {
+      socket.off("rooms_list", handleRooms);
+      socket.off("room_created", handleCreated);
       socket.off("invite_created", handleInvite);
     };
-  }, []);
+  }, [identity]);
+
   const createRoom = () => {
     if (!newRoom.trim()) return;
 
     const roomId = newRoom.trim().toLowerCase().replace(/\s+/g, "-");
 
-    setRooms((prev) => [...prev, roomId]);
-    setNewRoom("");
+    socket.emit("create_room", {
+      roomId,
+      name: newRoom,
+    });
 
-    router.push(`/chat?room=${roomId}`);
+    setNewRoom("");
   };
 
   const joinRoom = (roomId: string) => {
@@ -54,6 +82,7 @@ export default function GroupSidebar() {
   };
 
   const createInvite = (roomId: string) => {
+    console.log("[UI] createInvite clicked:", roomId);
     socket.emit("create_invite", { roomId });
   };
 
@@ -86,15 +115,15 @@ export default function GroupSidebar() {
       <div className="space-y-2">
         {rooms.map((room) => (
           <div
-            key={room}
+            key={room.roomId}
             className={`p-2 rounded cursor-pointer flex justify-between items-center ${
-              currentRoom === room ? "bg-gray-200" : "hover:bg-gray-100"
+              currentRoom === room.roomId ? "bg-gray-200" : "hover:bg-gray-100"
             }`}
           >
-            <span onClick={() => joinRoom(room)}>{room}</span>
+            <span onClick={() => joinRoom(room.roomId)}>{room.name}</span>
 
             <button
-              onClick={() => createInvite(room)}
+              onClick={() => createInvite(room.roomId)}
               className="text-xs text-blue-500"
             >
               invite

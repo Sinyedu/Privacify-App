@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { ChatGateway } from './chat/chat.gateway';
 import { MessageModule } from './messages/message.module';
 import { InvitesModule } from './invite/invite.module';
+import { RoomModule } from './room/room.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { InvitesModule } from './invite/invite.module';
 
     MessageModule,
     InvitesModule,
+    RoomModule,
   ],
   providers: [ChatGateway],
 })
