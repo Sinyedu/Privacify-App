@@ -6,7 +6,6 @@ import { useEffect } from "react";
 export default function Home() {
   const router = useRouter();
 
-  // 🔁 auto redirect if identity exists
   useEffect(() => {
     const identity = localStorage.getItem("identity");
 
@@ -25,7 +24,7 @@ export default function Home() {
 
     const identity = {
       userId: "guest_" + crypto.randomUUID(),
-      username,
+      username: username.trim(),
       type: "guest",
     };
 

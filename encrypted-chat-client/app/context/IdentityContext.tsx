@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { useAuth } from "./AuthContext";
 
 type Identity = {
   userId: string;
@@ -17,25 +18,40 @@ type IdentityContextType = {
 const IdentityContext = createContext<IdentityContextType | null>(null);
 
 export function IdentityProvider({ children }: { children: React.ReactNode }) {
-  const [identity, setIdentityState] = useState<Identity | null>(null);
+  const { user } = useAuth();
 
-  useEffect(() => {
+  const [identity, setIdentityState] = useState<Identity | null>(() => {
+    if (typeof window === "undefined") return null;
+
     const stored = localStorage.getItem("identity");
 
-    if (stored) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIdentityState(JSON.parse(stored));
-    } else {
-      const fallback: Identity = {
-        userId: "guest_" + crypto.randomUUID(),
-        username: "guest",
-        type: "guest",
+    if (!stored) return null;
+
+    try {
+      return JSON.parse(stored);
+    } catch {
+      localStorage.removeItem("identity");
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (user) {
+      const authIdentity: Identity = {
+        userId: user.email,
+        username: user.email,
+        type: "auth",
       };
 
-      localStorage.setItem("identity", JSON.stringify(fallback));
-      setIdentityState(fallback);
+      localStorage.setItem("identity", JSON.stringify(authIdentity));
+      setIdentityState(authIdentity);
+      return;
     }
-  }, []);
+
+    if (!identity) {
+      setIdentityState(null);
+    }
+  }, [identity, user]);
 
   const setIdentity = (i: Identity) => {
     localStorage.setItem("identity", JSON.stringify(i));
@@ -44,15 +60,7 @@ export function IdentityProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem("identity");
-
-    const fallback: Identity = {
-      userId: "guest_" + crypto.randomUUID(),
-      username: "guest",
-      type: "guest",
-    };
-
-    localStorage.setItem("identity", JSON.stringify(fallback));
-    setIdentityState(fallback);
+    setIdentityState(null);
   };
 
   return (
