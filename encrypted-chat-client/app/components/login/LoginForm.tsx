@@ -1,8 +1,12 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { authApi } from "@/core/api/auth";
+import { useAuth } from "@/app/context/AuthContext";
 
 export default function LoginForm() {
+  const router = useRouter();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,9 +20,9 @@ export default function LoginForm() {
     try {
       const res = await authApi.login({ email, password });
 
-      localStorage.setItem("token", res.access_token);
-
-      window.location.href = "/";
+      login(res.access_token);
+      localStorage.removeItem("identity");
+      router.push("/chat");
     } catch (err) {
       setError((err as Error).message);
     } finally {

@@ -38,8 +38,8 @@ export function IdentityProvider({ children }: { children: React.ReactNode }) {
   const identity = useMemo<Identity | null>(() => {
     if (user) {
       return {
-        userId: user.email,
-        username: user.email,
+        userId: user.id,
+        username: user.username,
         type: "auth",
       };
     }

@@ -8,8 +8,9 @@ export default function Home() {
 
   useEffect(() => {
     const identity = localStorage.getItem("identity");
+    const token = localStorage.getItem("token");
 
-    if (identity) {
+    if (identity || token) {
       router.replace("/chat");
     }
   }, [router]);

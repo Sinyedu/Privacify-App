@@ -7,6 +7,10 @@ export class RoomController {
 
   @Post()
   create(@Body() body: { roomId: string; name: string }) {
-    return this.roomService.createRoom(body.roomId, body.name);
+    return this.roomService.createRoom({
+      roomId: body.roomId,
+      name: body.name,
+      kind: 'group',
+    });
   }
 }

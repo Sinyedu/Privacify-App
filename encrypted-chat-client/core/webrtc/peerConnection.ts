@@ -16,7 +16,9 @@ type PeerConnectionOptions = {
   roomId: string;
   peerId: string;
   initiator: boolean;
+  localStream?: MediaStream | null;
   onDataMessage: (message: PeerDataMessage) => void;
+  onRemoteStream?: (peerId: string, stream: MediaStream) => void;
   onOpen: () => void;
   onClose: () => void;
 };
@@ -24,8 +26,15 @@ type PeerConnectionOptions = {
 export class PeerConnection {
   private readonly connection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   private channel?: RTCDataChannel;
+  private readonly remoteStream = new MediaStream();
 
   constructor(private readonly options: PeerConnectionOptions) {
+    options.localStream?.getTracks().forEach((track) => {
+      if (options.localStream) {
+        this.connection.addTrack(track, options.localStream);
+      }
+    });
+
     this.connection.onicecandidate = (event) => {
       if (!event.candidate) return;
       this.sendSignal("ice-candidate", event.candidate.toJSON());
@@ -39,6 +48,14 @@ export class PeerConnection {
 
     this.connection.ondatachannel = (event) => {
       this.attachDataChannel(event.channel);
+    };
+
+    this.connection.ontrack = (event) => {
+      event.streams[0]?.getTracks().forEach((track) => {
+        this.remoteStream.addTrack(track);
+      });
+
+      this.options.onRemoteStream?.(this.options.peerId, this.remoteStream);
     };
 
     if (options.initiator) {

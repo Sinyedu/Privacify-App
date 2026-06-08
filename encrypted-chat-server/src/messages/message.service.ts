@@ -29,4 +29,8 @@ export class MessageService {
   async findByRoom(roomId: string) {
     return this.messageModel.find({ roomId }).sort({ createdAt: 1 }).limit(100);
   }
+
+  async deleteByRoom(roomId: string) {
+    return this.messageModel.deleteMany({ roomId });
+  }
 }

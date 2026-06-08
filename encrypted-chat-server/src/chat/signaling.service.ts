@@ -50,10 +50,28 @@ export class SignalingService {
     return peers;
   }
 
+  async isRoomFull(
+    server: Server,
+    client: Socket,
+    roomId: string,
+    maxParticipants?: number,
+  ): Promise<boolean> {
+    if (!maxParticipants) return false;
+
+    const sockets = await server.in(roomId).fetchSockets();
+    const alreadyJoined = sockets.some((socket) => socket.id === client.id);
+
+    return !alreadyJoined && sockets.length >= maxParticipants;
+  }
+
   leaveRoom(client: Socket, roomId: string) {
     void client.leave(roomId);
     this.roomsBySocket.get(client.id)?.delete(roomId);
     this.notifyPeerLeft(client, roomId);
+  }
+
+  isJoined(client: Socket, roomId: string): boolean {
+    return Boolean(this.roomsBySocket.get(client.id)?.has(roomId));
   }
 
   forwardSignal(server: Server, client: Socket, data: WebRtcSignalPayload) {

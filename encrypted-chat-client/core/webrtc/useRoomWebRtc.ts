@@ -9,26 +9,46 @@ type UseRoomWebRtcOptions = {
   socket: Socket;
   roomId: string;
   identity: Identity | null;
+  localStream?: MediaStream | null;
   onMessage: (message: EncryptedPeerMessage) => void;
+  onRemoteStream?: (peerId: string, stream: MediaStream) => void;
 };
 
 export function useRoomWebRtc({
   socket,
   roomId,
   identity,
+  localStream,
   onMessage,
+  onRemoteStream,
 }: UseRoomWebRtcOptions) {
   const [peerCount, setPeerCount] = useState(0);
+  const [isConnected, setIsConnected] = useState(socket.connected);
   const sessionRef = useRef<RoomWebRtcSession | null>(null);
 
   useEffect(() => {
-    if (!identity || !socket.connected) return;
+    const handleConnect = () => setIsConnected(true);
+    const handleDisconnect = () => setIsConnected(false);
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!identity || !isConnected) return;
 
     const session = new RoomWebRtcSession({
       socket,
       roomId,
       identity,
+      localStream,
       onMessage,
+      onRemoteStream,
       onPeerCountChange: setPeerCount,
     });
 
@@ -36,6 +56,7 @@ export function useRoomWebRtc({
     socket.on("room_peers", session.handleRoomPeers);
     socket.on("webrtc_signal", session.handleSignal);
     socket.on("peer_left", session.handlePeerLeft);
+    socket.emit("join_room", { roomId });
 
     return () => {
       socket.off("room_peers", session.handleRoomPeers);
@@ -44,7 +65,15 @@ export function useRoomWebRtc({
       session.close();
       sessionRef.current = null;
     };
-  }, [identity, onMessage, roomId, socket]);
+  }, [
+    identity,
+    isConnected,
+    localStream,
+    onMessage,
+    onRemoteStream,
+    roomId,
+    socket,
+  ]);
 
   const broadcastMessage = (message: EncryptedPeerMessage) => {
     sessionRef.current?.broadcastMessage(message);

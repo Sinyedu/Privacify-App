@@ -59,7 +59,8 @@ export default function InvitePage() {
           await importRoomKey(data.roomId, roomKey);
         }
 
-        router.push(`/chat?room=${data.roomId}`);
+        const mode = data.intent === "direct-call" ? "&mode=call" : "";
+        router.push(`/chat?room=${data.roomId}${mode}`);
       } catch (err) {
         console.error(err);
         alert("Failed to join room");

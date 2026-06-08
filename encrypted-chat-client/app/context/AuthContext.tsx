@@ -3,7 +3,9 @@
 import { createContext, useContext, useState } from "react";
 
 type User = {
+  id: string;
   email: string;
+  username: string;
 };
 
 type AuthContextType = {
@@ -14,6 +16,28 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+function decodeUser(token: string): User | null {
+  try {
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded)) as {
+      sub?: string;
+      email?: string;
+      username?: string;
+    };
+
+    if (!payload.sub || !payload.email) return null;
+
+    return {
+      id: payload.sub,
+      email: payload.email,
+      username: payload.username || payload.email,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [token, setToken] = useState<string | null>(() => {
@@ -27,28 +51,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const stored = localStorage.getItem("token");
     if (!stored) return null;
 
-    try {
-      const payload = JSON.parse(atob(stored.split(".")[1]));
-      return { email: payload.email };
-    } catch {
-      return null;
-    }
+    return decodeUser(stored);
   });
 
   const login = (newToken: string) => {
     localStorage.setItem("token", newToken);
     setToken(newToken);
 
-    try {
-      const payload = JSON.parse(atob(newToken.split(".")[1]));
-      setUser({ email: payload.email });
-    } catch {
-      setUser(null);
-    }
+    setUser(decodeUser(newToken));
   };
 
   const logout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("identity");
     setToken(null);
     setUser(null);
   };

@@ -17,7 +17,9 @@ type RoomSessionOptions = {
   socket: Socket;
   roomId: string;
   identity: Identity;
+  localStream?: MediaStream | null;
   onMessage: (message: EncryptedPeerMessage) => void;
+  onRemoteStream?: (peerId: string, stream: MediaStream) => void;
   onPeerCountChange: (count: number) => void;
 };
 
@@ -81,7 +83,9 @@ export class RoomWebRtcSession {
       roomId: this.options.roomId,
       peerId,
       initiator,
+      localStream: this.options.localStream,
       onDataMessage: (message) => void this.handleDataMessage(message),
+      onRemoteStream: this.options.onRemoteStream,
       onOpen: () => void this.shareRoomKey(),
       onClose: () => this.removePeer(peerId),
     });

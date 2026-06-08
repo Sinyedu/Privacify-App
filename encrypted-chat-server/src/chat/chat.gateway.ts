@@ -8,6 +8,7 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 
+import { randomUUID } from 'crypto';
 import { Server, Socket } from 'socket.io';
 import { MessageService } from '../messages/message.service';
 import { InviteService } from '../invite/invite.service';
@@ -59,11 +60,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('create_room')
   async createRoom(@MessageBody() data: { roomId: string; name: string }) {
-    const room = await this.roomService.createRoom(data.roomId, data.name);
+    const room = await this.roomService.createRoom({
+      roomId: data.roomId,
+      name: data.name,
+      kind: 'group',
+    });
 
     const payload = {
       roomId: room.roomId,
       name: room.name,
+      kind: room.kind,
     };
 
     this.server.emit('room_created', payload);
@@ -78,6 +84,22 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!identity) return;
 
     console.log('[gateway] join_room:', data.roomId, identity.username);
+
+    const room = await this.roomService.findByRoomId(data.roomId);
+    const isRoomFull = await this.signalingService.isRoomFull(
+      this.server,
+      client,
+      data.roomId,
+      room?.maxParticipants,
+    );
+
+    if (isRoomFull) {
+      client.emit('room_join_blocked', {
+        roomId: data.roomId,
+        reason: 'room_full',
+      });
+      return;
+    }
 
     const messages = await this.messageService.findByRoom(data.roomId);
     const peers = await this.signalingService.joinRoom(
@@ -119,6 +141,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       rooms.map((r) => ({
         roomId: r.roomId,
         name: r.name,
+        kind: r.kind ?? 'group',
       })),
     );
   }
@@ -160,7 +183,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('create_invite')
   async createInvite(
-    @MessageBody() data: { roomId: string },
+    @MessageBody() data: { roomId: string; intent?: 'group' | 'direct-call' },
     @ConnectedSocket() client: Socket,
   ) {
     const identity = this.signalingService.getIdentity(client);
@@ -168,11 +191,84 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     console.log('[gateway] create_invite:', identity.username);
 
-    const token = await this.inviteService.createInvite(data.roomId);
+    const intent = data.intent ?? 'group';
+    const token = await this.inviteService.createInvite(data.roomId, intent);
 
     client.emit('invite_created', {
       roomId: data.roomId,
-      link: `${process.env.CLIENT_URL}/invite/${token}`,
+      intent,
+      link: `/invite/${token}`,
+    });
+  }
+
+  @SubscribeMessage('create_call_invite')
+  async createCallInvite(
+    @MessageBody() data: { label?: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const identity = this.signalingService.getIdentity(client);
+    if (!identity) return;
+
+    const callId = randomUUID();
+    const label = data.label?.trim() || `${identity.username}'s private call`;
+    const shortId = callId.slice(0, 8);
+
+    const room = await this.roomService.createRoom({
+      roomId: `call-${callId}`,
+      name: `${label} #${shortId}`,
+      kind: 'direct-call',
+      maxParticipants: 2,
+    });
+
+    this.server.emit('room_created', {
+      roomId: room.roomId,
+      name: room.name,
+      kind: room.kind,
+    });
+
+    const token = await this.inviteService.createInvite(
+      room.roomId,
+      'direct-call',
+    );
+
+    client.emit('invite_created', {
+      roomId: room.roomId,
+      intent: 'direct-call',
+      link: `/invite/${token}`,
+    });
+  }
+
+  @SubscribeMessage('end_call')
+  async endCall(
+    @MessageBody() data: { roomId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const identity = this.signalingService.getIdentity(client);
+    if (!identity) return;
+
+    const room = await this.roomService.findByRoomId(data.roomId);
+
+    if (!room || room.kind !== 'direct-call') {
+      return;
+    }
+
+    if (!this.signalingService.isJoined(client, data.roomId)) {
+      return;
+    }
+
+    await Promise.all([
+      this.inviteService.deleteByRoomId(data.roomId),
+      this.messageService.deleteByRoom(data.roomId),
+      this.roomService.deleteByRoomId(data.roomId),
+    ]);
+
+    this.server.to(data.roomId).emit('call_ended', {
+      roomId: data.roomId,
+      endedBy: identity.username,
+    });
+
+    this.server.emit('room_deleted', {
+      roomId: data.roomId,
     });
   }
 }

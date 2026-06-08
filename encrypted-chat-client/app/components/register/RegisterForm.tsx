@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { authApi } from "@/core/api/auth";
+import { useAuth } from "@/app/context/AuthContext";
 
 export default function RegisterForm() {
+  const router = useRouter();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -23,20 +27,9 @@ export default function RegisterForm() {
         password,
       });
 
-      localStorage.setItem("token", res.access_token);
-
-      localStorage.setItem(
-        "identity",
-        JSON.stringify({
-          userId: res.user?.id ?? crypto.randomUUID(),
-          username,
-          type: "auth",
-        }),
-      );
-
-      localStorage.removeItem("guest_username");
-
-      window.location.href = "/";
+      login(res.access_token);
+      localStorage.removeItem("identity");
+      router.push("/chat");
     } catch (err) {
       setError((err as Error).message || "Registration failed");
     } finally {

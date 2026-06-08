@@ -1,5 +1,19 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+async function readAuthResponse(res: Response) {
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const message = Array.isArray(data.message)
+      ? data.message.join(", ")
+      : data.message;
+
+    throw new Error(message || "Authentication failed");
+  }
+
+  return data;
+}
+
 export const authApi = {
   login: async (data: { email: string; password: string }) => {
     const res = await fetch(`${API_URL}/auth/login`, {
@@ -8,8 +22,7 @@ export const authApi = {
       body: JSON.stringify(data),
     });
 
-    if (!res.ok) throw new Error("Login failed");
-    return res.json();
+    return readAuthResponse(res);
   },
 
   register: async (data: {
@@ -23,7 +36,6 @@ export const authApi = {
       body: JSON.stringify(data),
     });
 
-    if (!res.ok) throw new Error("Register failed");
-    return res.json();
+    return readAuthResponse(res);
   },
 };

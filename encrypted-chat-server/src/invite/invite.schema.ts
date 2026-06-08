@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
 export type InviteDocument = Invite & Document;
+export type InviteIntent = 'group' | 'direct-call';
 
 @Schema({ timestamps: true })
 export class Invite {
@@ -10,6 +11,9 @@ export class Invite {
 
   @Prop({ required: true })
   roomId: string;
+
+  @Prop({ default: 'group' })
+  intent: InviteIntent;
 
   @Prop()
   expiresAt?: Date;

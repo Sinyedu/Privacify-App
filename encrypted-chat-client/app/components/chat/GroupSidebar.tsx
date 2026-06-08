@@ -9,6 +9,13 @@ import { exportRoomKey, getOrCreateRoomKey } from "@/core/crypto/encryption";
 type Room = {
   roomId: string;
   name: string;
+  kind?: "group" | "direct-call";
+};
+
+type InviteCreatedPayload = {
+  roomId: string;
+  intent?: "group" | "direct-call";
+  link: string;
 };
 
 export default function GroupSidebar() {
@@ -49,34 +56,39 @@ export default function GroupSidebar() {
       });
     };
 
-    const handleInvite = async ({
-      roomId,
-      link,
-    }: {
-      roomId: string;
-      link: string;
-    }) => {
+    const handleDeleted = ({ roomId }: { roomId: string }) => {
+      setRooms((prev) => prev.filter((room) => room.roomId !== roomId));
+    };
+
+    const handleInvite = async ({ roomId, intent, link }: InviteCreatedPayload) => {
       await getOrCreateRoomKey(roomId);
 
       const roomKey = await exportRoomKey(roomId);
+      const baseInviteUrl = new URL(link, window.location.origin).toString();
       const inviteUrl = roomKey
-        ? `${link}#key=${encodeURIComponent(roomKey)}`
-        : link;
+        ? `${baseInviteUrl}#key=${encodeURIComponent(roomKey)}`
+        : baseInviteUrl;
 
       console.log("[UI] invite received:", inviteUrl);
       setInviteLink(inviteUrl);
+
+      if (intent === "direct-call") {
+        router.push(`/chat?room=${roomId}&mode=call`);
+      }
     };
 
     socket.on("rooms_list", handleRooms);
     socket.on("room_created", handleCreated);
+    socket.on("room_deleted", handleDeleted);
     socket.on("invite_created", handleInvite);
 
     return () => {
       socket.off("rooms_list", handleRooms);
       socket.off("room_created", handleCreated);
+      socket.off("room_deleted", handleDeleted);
       socket.off("invite_created", handleInvite);
     };
-  }, [identity]);
+  }, [identity, router]);
 
   const createRoom = () => {
     if (!newRoom.trim()) return;
@@ -91,13 +103,20 @@ export default function GroupSidebar() {
     setNewRoom("");
   };
 
-  const joinRoom = (roomId: string) => {
-    router.push(`/chat?room=${roomId}`);
+  const joinRoomFromList = (room: Room) => {
+    const mode = room.kind === "direct-call" ? "&mode=call" : "";
+    router.push(`/chat?room=${room.roomId}${mode}`);
   };
 
   const createInvite = (roomId: string) => {
     console.log("[UI] createInvite clicked:", roomId);
-    socket.emit("create_invite", { roomId });
+    socket.emit("create_invite", { roomId, intent: "group" });
+  };
+
+  const createCallInvite = () => {
+    socket.emit("create_call_invite", {
+      label: identity ? `${identity.username}'s private call` : "Private call",
+    });
   };
 
   const copyInvite = async () => {
@@ -126,22 +145,51 @@ export default function GroupSidebar() {
         </button>
       </div>
 
+      <button
+        onClick={createCallInvite}
+        className="w-full text-sm bg-neutral-900 text-white p-2 rounded"
+      >
+        Create call link
+      </button>
+
       <div className="space-y-2">
         {rooms.map((room) => (
           <div
             key={room.roomId}
-            className={`p-2 rounded cursor-pointer flex justify-between items-center ${
-              currentRoom === room.roomId ? "bg-gray-200" : "hover:bg-gray-100"
-            }`}
+            className={[
+              "p-2 rounded cursor-pointer flex justify-between items-center border",
+              currentRoom === room.roomId
+                ? room.kind === "direct-call"
+                  ? "bg-neutral-950 text-white border-neutral-950"
+                  : "bg-gray-900 text-white border-gray-900"
+                : "border-transparent hover:bg-gray-100",
+            ].join(" ")}
           >
-            <span onClick={() => joinRoom(room.roomId)}>{room.name}</span>
+            <span onClick={() => joinRoomFromList(room)} className="min-w-0">
+              {room.name}
+              {room.kind === "direct-call" && (
+                <span
+                  className={[
+                    "ml-2 text-[10px] uppercase",
+                    currentRoom === room.roomId ? "text-red-300" : "text-gray-500",
+                  ].join(" ")}
+                >
+                  call
+                </span>
+              )}
+            </span>
 
-            <button
-              onClick={() => createInvite(room.roomId)}
-              className="text-xs text-blue-500"
-            >
-              invite
-            </button>
+            {room.kind !== "direct-call" && (
+              <button
+                onClick={() => createInvite(room.roomId)}
+                className={[
+                  "text-xs",
+                  currentRoom === room.roomId ? "text-blue-200" : "text-blue-500",
+                ].join(" ")}
+              >
+                invite
+              </button>
+            )}
           </div>
         ))}
       </div>

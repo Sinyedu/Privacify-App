@@ -7,12 +7,12 @@ export class InviteController {
 
   @Get(':token')
   async resolve(@Param('token') token: string) {
-    const roomId = await this.inviteService.resolveToken(token);
+    const invite = await this.inviteService.resolveToken(token);
 
-    if (!roomId) {
+    if (!invite) {
       return { valid: false };
     }
 
-    return { valid: true, roomId };
+    return { valid: true, roomId: invite.roomId, intent: invite.intent };
   }
 }

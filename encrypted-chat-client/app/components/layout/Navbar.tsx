@@ -11,15 +11,14 @@ export default function Navbar() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setGuestUsername(localStorage.getItem("guest_username"));
+    setGuestUsername(readGuestUsername());
   }, []);
 
-  const displayName = user?.email || guestUsername;
+  const displayName = user?.username || guestUsername;
   const isGuest = !user && guestUsername;
 
   const handleLogout = () => {
     logout();
-    localStorage.removeItem("guest_username");
     window.location.href = "/";
   };
 
@@ -72,4 +71,20 @@ export default function Navbar() {
       </div>
     </nav>
   );
+}
+
+function readGuestUsername(): string | null {
+  const stored = localStorage.getItem("identity");
+  if (!stored) return null;
+
+  try {
+    const identity = JSON.parse(stored) as {
+      username?: string;
+      type?: string;
+    };
+
+    return identity.type === "guest" ? identity.username || null : null;
+  } catch {
+    return null;
+  }
 }
