@@ -12,12 +12,8 @@ import { Server, Socket } from 'socket.io';
 import { MessageService } from '../messages/message.service';
 import { InviteService } from '../invite/invite.service';
 import { RoomService } from '../room/room.service';
-
-type Identity = {
-  userId: string;
-  username: string;
-  type: 'auth' | 'guest';
-};
+import type { Identity, WebRtcSignalPayload } from './chat.types';
+import { SignalingService } from './signaling.service';
 
 @WebSocketGateway({
   cors: {
@@ -33,6 +29,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly messageService: MessageService,
     private readonly inviteService: InviteService,
     private readonly roomService: RoomService,
+    private readonly signalingService: SignalingService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -50,20 +47,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             type: 'guest',
           };
 
-    client.data.identity = identity;
+    this.signalingService.initializeClient(client, identity);
 
     console.log('[gateway] identity set:', identity.username);
   }
 
   handleDisconnect(client: Socket) {
+    this.signalingService.notifyDisconnect(client);
     console.log('[gateway] DISCONNECT:', client.id);
   }
 
   @SubscribeMessage('create_room')
-  async createRoom(
-    @MessageBody() data: { roomId: string; name: string },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async createRoom(@MessageBody() data: { roomId: string; name: string }) {
     const room = await this.roomService.createRoom(data.roomId, data.name);
 
     const payload = {
@@ -79,15 +74,40 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { roomId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const identity = client.data.identity as Identity;
+    const identity = this.signalingService.getIdentity(client);
+    if (!identity) return;
 
     console.log('[gateway] join_room:', data.roomId, identity.username);
 
-    client.join(data.roomId);
-
     const messages = await this.messageService.findByRoom(data.roomId);
+    const peers = await this.signalingService.joinRoom(
+      this.server,
+      client,
+      data.roomId,
+    );
 
     client.emit('chat_history', messages);
+    client.emit('room_peers', {
+      roomId: data.roomId,
+      peers,
+    });
+  }
+
+  @SubscribeMessage('leave_room')
+  leaveRoom(
+    @MessageBody() data: { roomId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.signalingService.leaveRoom(client, data.roomId);
+  }
+
+  @SubscribeMessage('webrtc_signal')
+  forwardWebRtcSignal(
+    @MessageBody()
+    data: WebRtcSignalPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.signalingService.forwardSignal(this.server, client, data);
   }
 
   @SubscribeMessage('get_rooms')
@@ -109,10 +129,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     payload: {
       roomId: string;
       text: string;
+      id?: string;
     },
     @ConnectedSocket() client: Socket,
   ) {
-    const identity = client.data.identity as Identity;
+    const identity = this.signalingService.getIdentity(client);
 
     if (!identity) {
       console.log('[gateway] blocked message (no identity)');
@@ -129,6 +150,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
 
     this.server.to(payload.roomId).emit('receive_message', {
+      id: payload.id ?? String(message._id),
       _id: message._id,
       roomId: payload.roomId,
       text: payload.text,
@@ -141,13 +163,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { roomId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const identity = client.data.identity as Identity;
+    const identity = this.signalingService.getIdentity(client);
+    if (!identity) return;
 
     console.log('[gateway] create_invite:', identity.username);
 
     const token = await this.inviteService.createInvite(data.roomId);
 
     client.emit('invite_created', {
+      roomId: data.roomId,
       link: `${process.env.CLIENT_URL}/invite/${token}`,
     });
   }

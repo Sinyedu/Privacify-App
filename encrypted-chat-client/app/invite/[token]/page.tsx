@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { importRoomKey } from "@/core/crypto/encryption";
 
 export default function InvitePage() {
   const { token } = useParams();
@@ -52,6 +53,12 @@ export default function InvitePage() {
           return;
         }
 
+        const roomKey = new URLSearchParams(window.location.hash.slice(1)).get("key");
+
+        if (roomKey) {
+          await importRoomKey(data.roomId, roomKey);
+        }
+
         router.push(`/chat?room=${data.roomId}`);
       } catch (err) {
         console.error(err);
@@ -62,7 +69,7 @@ export default function InvitePage() {
     }
 
     run();
-  }, [router, token]);
+  }, [API_URL, router, token]);
 
   return (
     <div className="h-screen flex items-center justify-center">

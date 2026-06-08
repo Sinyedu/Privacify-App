@@ -2,12 +2,13 @@
 
 import { useChatStore } from "@/core/store/chat-store";
 
-export default function EncryptionPanel() {
+export default function EncryptionPanel({ peerCount }: { peerCount: number }) {
   const debug = useChatStore((s) => s.debug);
 
   return (
     <div className="w-80 border-l p-3 text-xs">
       <h2 className="font-bold mb-2">Encryption Console</h2>
+      <div className="mb-3 text-gray-600">WebRTC peers: {peerCount}</div>
 
       {!debug && (
         <div className="text-gray-500">

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { socket } from "@/core/socket/socket";
 import { useIdentity } from "@/app/context/IdentityContext";
+import { exportRoomKey, getOrCreateRoomKey } from "@/core/crypto/encryption";
 
 type Room = {
   roomId: string;
@@ -48,9 +49,22 @@ export default function GroupSidebar() {
       });
     };
 
-    const handleInvite = ({ link }: { link: string }) => {
-      console.log("[UI] invite received:", link);
-      setInviteLink(link);
+    const handleInvite = async ({
+      roomId,
+      link,
+    }: {
+      roomId: string;
+      link: string;
+    }) => {
+      await getOrCreateRoomKey(roomId);
+
+      const roomKey = await exportRoomKey(roomId);
+      const inviteUrl = roomKey
+        ? `${link}#key=${encodeURIComponent(roomKey)}`
+        : link;
+
+      console.log("[UI] invite received:", inviteUrl);
+      setInviteLink(inviteUrl);
     };
 
     socket.on("rooms_list", handleRooms);
