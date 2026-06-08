@@ -28,21 +28,13 @@ export default function GroupSidebar() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [newRoom, setNewRoom] = useState("");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [roomError, setRoomError] = useState<string | null>(null);
+  const [creatingRoom, setCreatingRoom] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const [creatingCall, setCreatingCall] = useState(false);
 
   useEffect(() => {
     if (!identity) return;
-
-    void connectSocket(identity).catch((error) => {
-      console.error("[socket] failed to connect:", error);
-    });
-  }, [identity]);
-
-  useEffect(() => {
-    if (!identity) return;
-
-    socket.emit("get_rooms");
 
     const handleRooms = (data: Room[]) => {
       setRooms(data);
@@ -54,10 +46,21 @@ export default function GroupSidebar() {
         if (exists) return prev;
         return [...prev, room];
       });
+      setCreatingRoom(false);
+      setRoomError(null);
+
+      if (room.kind !== "direct-call") {
+        router.push(`/chat?room=${room.roomId}`);
+      }
     };
 
     const handleDeleted = ({ roomId }: { roomId: string }) => {
       setRooms((prev) => prev.filter((room) => room.roomId !== roomId));
+    };
+
+    const handleRoomFailed = ({ message }: { message?: string }) => {
+      setCreatingRoom(false);
+      setRoomError(message || "Failed to create group");
     };
 
     const handleCallFailed = ({ message }: { message?: string }) => {
@@ -86,32 +89,55 @@ export default function GroupSidebar() {
 
     socket.on("rooms_list", handleRooms);
     socket.on("room_created", handleCreated);
+    socket.on("room_create_failed", handleRoomFailed);
     socket.on("room_deleted", handleDeleted);
     socket.on("call_create_failed", handleCallFailed);
     socket.on("invite_created", handleInvite);
 
+    void connectSocket(identity)
+      .then(() => {
+        socket.emit("get_rooms");
+      })
+      .catch((error) => {
+        console.error("[socket] failed to connect:", error);
+        setRoomError("Could not connect to load groups.");
+        setCallError("Could not connect to create calls.");
+      });
+
     return () => {
       socket.off("rooms_list", handleRooms);
       socket.off("room_created", handleCreated);
+      socket.off("room_create_failed", handleRoomFailed);
       socket.off("room_deleted", handleDeleted);
       socket.off("call_create_failed", handleCallFailed);
       socket.off("invite_created", handleInvite);
     };
   }, [identity, router]);
 
-  const createRoom = () => {
-    if (!newRoom.trim()) return;
+  const createRoom = async () => {
+    if (!identity || !newRoom.trim() || creatingRoom) return;
 
     const slug = newRoom.trim().toLowerCase().replace(/\s+/g, "-");
     const roomId = `${slug}-${crypto.randomUUID().slice(0, 8)}`;
 
-    socket.emit("create_room", {
-      roomId,
-      name: newRoom,
-    });
+    setCreatingRoom(true);
+    setRoomError(null);
 
-    void getOrCreateRoomKey(roomId);
-    setNewRoom("");
+    try {
+      await connectSocket(identity);
+      await getOrCreateRoomKey(roomId);
+
+      socket.emit("create_room", {
+        roomId,
+        name: newRoom,
+      });
+
+      setNewRoom("");
+    } catch (error) {
+      console.error("[UI] create group failed:", error);
+      setRoomError("Could not connect to create the group.");
+      setCreatingRoom(false);
+    }
   };
 
   const joinRoomFromList = (room: Room) => {
@@ -120,8 +146,17 @@ export default function GroupSidebar() {
   };
 
   const createInvite = (roomId: string) => {
+    if (!identity) return;
+
     console.log("[UI] createInvite clicked:", roomId);
-    socket.emit("create_invite", { roomId, intent: "group" });
+    void connectSocket(identity)
+      .then(() => {
+        socket.emit("create_invite", { roomId, intent: "group" });
+      })
+      .catch((error) => {
+        console.error("[UI] create invite failed:", error);
+        setRoomError("Could not connect to create the invite.");
+      });
   };
 
   const createCallInvite = async () => {
@@ -161,12 +196,15 @@ export default function GroupSidebar() {
           className="flex-1 border p-1 rounded"
         />
         <button
-          onClick={createRoom}
-          className="px-2 bg-black text-white rounded"
+          onClick={() => void createRoom()}
+          disabled={!identity || creatingRoom}
+          className="px-2 bg-black text-white rounded disabled:opacity-50"
         >
-          +
+          {creatingRoom ? "..." : "+"}
         </button>
       </div>
+
+      {roomError && <div className="text-sm text-red-600">{roomError}</div>}
 
       <button
         onClick={() => void createCallInvite()}

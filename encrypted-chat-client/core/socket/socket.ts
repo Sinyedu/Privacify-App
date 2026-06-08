@@ -6,7 +6,23 @@ type SocketIdentity = {
   type: "auth";
 };
 
-export const socket = io(process.env.NEXT_PUBLIC_API_URL!, {
+function getSocketUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
+  if (typeof window === "undefined") {
+    return "http://localhost:3001";
+  }
+
+  const isLocalhost = ["localhost", "127.0.0.1"].includes(
+    window.location.hostname,
+  );
+
+  return isLocalhost ? "http://localhost:3001" : window.location.origin;
+}
+
+export const socket = io(getSocketUrl(), {
   transports: ["websocket"],
   autoConnect: false,
 });

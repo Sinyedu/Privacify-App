@@ -15,11 +15,11 @@ import { InviteService } from '../invite/invite.service';
 import { RoomService } from '../room/room.service';
 import type { Identity, WebRtcSignalPayload } from './chat.types';
 import { SignalingService } from './signaling.service';
-import { getCorsOrigins } from '../config/cors';
+import { getCorsOrigin } from '../config/cors';
 
 @WebSocketGateway({
   cors: {
-    origin: getCorsOrigins(),
+    origin: getCorsOrigin(),
     credentials: true,
   },
 })
@@ -68,23 +68,35 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ) {
     const identity = this.signalingService.getIdentity(client);
-    if (!identity) return;
+    if (!identity) {
+      client.emit('room_create_failed', {
+        message: 'Missing socket identity. Reconnect and try again.',
+      });
+      return;
+    }
 
-    const shortId = randomUUID().slice(0, 8);
-    const room = await this.roomService.createRoom({
-      roomId: data.roomId,
-      name: `${data.name} #${shortId}`,
-      kind: 'group',
-      owner: identity,
-    });
+    try {
+      const shortId = randomUUID().slice(0, 8);
+      const room = await this.roomService.createRoom({
+        roomId: data.roomId,
+        name: `${data.name} #${shortId}`,
+        kind: 'group',
+        owner: identity,
+      });
 
-    const payload = {
-      roomId: room.roomId,
-      name: room.name,
-      kind: room.kind,
-    };
+      const payload = {
+        roomId: room.roomId,
+        name: room.name,
+        kind: room.kind,
+      };
 
-    client.emit('room_created', payload);
+      client.emit('room_created', payload);
+    } catch (error) {
+      console.error('[gateway] create_room failed:', error);
+      client.emit('room_create_failed', {
+        message: 'Could not create the group. Try again.',
+      });
+    }
   }
 
   @SubscribeMessage('join_room')
