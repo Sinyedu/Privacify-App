@@ -2,20 +2,11 @@
 
 import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
-import { useEffect, useState } from "react";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
 
-  const [guestUsername, setGuestUsername] = useState<string | null>(null);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setGuestUsername(readGuestUsername());
-  }, []);
-
-  const displayName = user?.username || guestUsername;
-  const isGuest = !user && guestUsername;
+  const displayName = user?.username;
 
   const handleLogout = () => {
     logout();
@@ -57,7 +48,7 @@ export default function Navbar() {
         ) : (
           <>
             <span className="text-sm">
-              {displayName} {isGuest && "(guest)"}
+              {displayName}
             </span>
 
             <button
@@ -71,20 +62,4 @@ export default function Navbar() {
       </div>
     </nav>
   );
-}
-
-function readGuestUsername(): string | null {
-  const stored = localStorage.getItem("identity");
-  if (!stored) return null;
-
-  try {
-    const identity = JSON.parse(stored) as {
-      username?: string;
-      type?: string;
-    };
-
-    return identity.type === "guest" ? identity.username || null : null;
-  } catch {
-    return null;
-  }
 }

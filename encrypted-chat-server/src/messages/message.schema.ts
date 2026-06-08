@@ -14,9 +14,6 @@ export class Message {
   @Prop({ required: true })
   encrypted: string;
 
-  @Prop({ default: false })
-  isGuest: boolean;
-
   @Prop()
   expiresAt?: Date;
 }

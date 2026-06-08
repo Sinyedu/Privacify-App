@@ -15,10 +15,11 @@ import { InviteService } from '../invite/invite.service';
 import { RoomService } from '../room/room.service';
 import type { Identity, WebRtcSignalPayload } from './chat.types';
 import { SignalingService } from './signaling.service';
+import { getCorsOrigins } from '../config/cors';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN,
+    origin: getCorsOrigins(),
     credentials: true,
   },
 })
@@ -39,14 +40,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log('[gateway] CONNECT:', client.id);
     console.log('[gateway] auth payload:', rawIdentity);
 
-    const identity: Identity =
-      rawIdentity?.userId && rawIdentity?.username
-        ? (rawIdentity as Identity)
-        : {
-            userId: `anon_${client.id}`,
-            username: 'guest',
-            type: 'guest',
-          };
+    if (
+      !rawIdentity?.userId ||
+      !rawIdentity?.username ||
+      rawIdentity.type !== 'auth'
+    ) {
+      client.emit('auth_required');
+      client.disconnect(true);
+      return;
+    }
+
+    const identity = rawIdentity as Identity;
 
     this.signalingService.initializeClient(client, identity);
 
@@ -211,7 +215,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       roomId: payload.roomId,
       sender: identity.username,
       encrypted: payload.text,
-      isGuest: identity.type === 'guest',
     });
 
     this.server.to(payload.roomId).emit('receive_message', {
@@ -256,36 +259,48 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ) {
     const identity = this.signalingService.getIdentity(client);
-    if (!identity) return;
+    if (!identity) {
+      client.emit('call_create_failed', {
+        message: 'Missing socket identity. Reconnect and try again.',
+      });
+      return;
+    }
 
-    const callId = randomUUID();
-    const label = data.label?.trim() || `${identity.username}'s private call`;
-    const shortId = callId.slice(0, 8);
+    try {
+      const callId = randomUUID();
+      const label = data.label?.trim() || `${identity.username}'s private call`;
+      const shortId = callId.slice(0, 8);
 
-    const room = await this.roomService.createRoom({
-      roomId: `call-${callId}`,
-      name: `${label} #${shortId}`,
-      kind: 'direct-call',
-      maxParticipants: 2,
-      owner: identity,
-    });
+      const room = await this.roomService.createRoom({
+        roomId: `call-${callId}`,
+        name: `${label} #${shortId}`,
+        kind: 'direct-call',
+        maxParticipants: 2,
+        owner: identity,
+      });
 
-    client.emit('room_created', {
-      roomId: room.roomId,
-      name: room.name,
-      kind: room.kind,
-    });
+      client.emit('room_created', {
+        roomId: room.roomId,
+        name: room.name,
+        kind: room.kind,
+      });
 
-    const token = await this.inviteService.createInvite(
-      room.roomId,
-      'direct-call',
-    );
+      const token = await this.inviteService.createInvite(
+        room.roomId,
+        'direct-call',
+      );
 
-    client.emit('invite_created', {
-      roomId: room.roomId,
-      intent: 'direct-call',
-      link: `/invite/${token}`,
-    });
+      client.emit('invite_created', {
+        roomId: room.roomId,
+        intent: 'direct-call',
+        link: `/invite/${token}`,
+      });
+    } catch (error) {
+      console.error('[gateway] create_call_invite failed:', error);
+      client.emit('call_create_failed', {
+        message: 'Could not create the call. Try again.',
+      });
+    }
   }
 
   @SubscribeMessage('end_call')

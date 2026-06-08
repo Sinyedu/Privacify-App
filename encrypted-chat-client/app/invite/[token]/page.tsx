@@ -1,53 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { usePathname, useRouter, useParams } from "next/navigation";
 import { importRoomKey } from "@/core/crypto/encryption";
 import { useIdentity } from "@/app/context/IdentityContext";
 
 export default function InvitePage() {
   const { token } = useParams();
   const router = useRouter();
-  const { identity, setIdentity } = useIdentity();
+  const pathname = usePathname();
+  const { identity } = useIdentity();
   const [loading, setLoading] = useState(true);
   const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
   useEffect(() => {
     async function run() {
-      let activeIdentity = identity;
-
-      if (!activeIdentity) {
-        const choice = confirm(
-          "You are not logged in.\n\nOK = Continue as guest\nCancel = Login",
-        );
-
-        if (!choice) {
-          router.push("/login");
-          return;
-        }
-
-        const username = prompt("Enter guest username");
-
-        if (!username || username.trim().length < 2) {
-          alert("Invalid username");
-          router.push("/");
-          return;
-        }
-
-        activeIdentity = {
-          userId: crypto.randomUUID(),
-          username,
-          type: "guest",
-        };
-
-        setIdentity(activeIdentity);
+      if (!identity) {
+        const returnTo = `${pathname}${window.location.hash}`;
+        router.push(`/login?next=${encodeURIComponent(returnTo)}`);
+        return;
       }
 
       try {
         const res = await fetch(`${API_URL}/invite/${token}/accept`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ identity: activeIdentity }),
+          body: JSON.stringify({ identity }),
         });
 
         const data = await res.json();
@@ -61,7 +39,11 @@ export default function InvitePage() {
         const roomKey = new URLSearchParams(window.location.hash.slice(1)).get("key");
 
         if (roomKey) {
-          await importRoomKey(data.roomId, roomKey);
+          await importRoomKey(data.roomId, roomKey, true);
+        } else {
+          alert("This invite is missing its encryption key. Ask for a new invite link.");
+          router.push("/chat");
+          return;
         }
 
         const mode = data.intent === "direct-call" ? "&mode=call" : "";
@@ -75,7 +57,7 @@ export default function InvitePage() {
     }
 
     run();
-  }, [API_URL, identity, router, setIdentity, token]);
+  }, [API_URL, identity, pathname, router, token]);
 
   return (
     <div className="h-screen flex items-center justify-center">

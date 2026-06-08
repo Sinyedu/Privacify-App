@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 async function readAuthResponse(res: Response) {
   const data = await res.json().catch(() => ({}));
@@ -16,11 +16,17 @@ async function readAuthResponse(res: Response) {
 
 export const authApi = {
   login: async (data: { email: string; password: string }) => {
-    const res = await fetch(`${API_URL}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
+    let res: Response;
+
+    try {
+      res = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+    } catch {
+      throw new Error(`Cannot reach API at ${API_URL}`);
+    }
 
     return readAuthResponse(res);
   },
@@ -30,11 +36,17 @@ export const authApi = {
     email: string;
     password: string;
   }) => {
-    const res = await fetch(`${API_URL}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
+    let res: Response;
+
+    try {
+      res = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+    } catch {
+      throw new Error(`Cannot reach API at ${API_URL}`);
+    }
 
     return readAuthResponse(res);
   },

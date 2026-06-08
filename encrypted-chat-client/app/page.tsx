@@ -7,32 +7,12 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    const identity = localStorage.getItem("identity");
     const token = localStorage.getItem("token");
 
-    if (identity || token) {
+    if (token) {
       router.replace("/chat");
     }
   }, [router]);
-
-  const goGuest = () => {
-    const username = prompt("Enter a username");
-
-    if (!username || username.trim().length < 2) {
-      alert("Username must be at least 2 characters");
-      return;
-    }
-
-    const identity = {
-      userId: "guest_" + crypto.randomUUID(),
-      username: username.trim(),
-      type: "guest",
-    };
-
-    localStorage.setItem("identity", JSON.stringify(identity));
-
-    router.push("/chat");
-  };
 
   const goLogin = () => {
     router.push("/login");
@@ -61,13 +41,6 @@ export default function Home() {
 
           <button onClick={goRegister} className="w-full p-3 rounded border">
             Register
-          </button>
-
-          <button
-            onClick={goGuest}
-            className="w-full p-3 rounded bg-zinc-200 dark:bg-zinc-800"
-          >
-            Continue as Guest
           </button>
         </div>
       </div>

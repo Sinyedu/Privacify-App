@@ -14,7 +14,7 @@ export class RoomController {
       owner: {
         userId: string;
         username: string;
-        type: 'auth' | 'guest';
+        type: 'auth';
       };
     },
   ) {

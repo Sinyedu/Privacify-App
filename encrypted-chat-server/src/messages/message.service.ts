@@ -10,20 +10,8 @@ export class MessageService {
     private messageModel: Model<MessageDocument>,
   ) {}
 
-  async create(data: {
-    roomId: string;
-    sender: string;
-    encrypted: string;
-    isGuest: boolean;
-  }) {
-    const expiresAt = data.isGuest
-      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-      : undefined;
-
-    return this.messageModel.create({
-      ...data,
-      expiresAt,
-    });
+  async create(data: { roomId: string; sender: string; encrypted: string }) {
+    return this.messageModel.create(data);
   }
 
   async findByRoom(roomId: string) {

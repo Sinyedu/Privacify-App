@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { authApi } from "@/core/api/auth";
 import { useAuth } from "@/app/context/AuthContext";
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +23,7 @@ export default function LoginForm() {
 
       login(res.access_token);
       localStorage.removeItem("identity");
-      router.push("/chat");
+      router.push(searchParams.get("next") || "/chat");
     } catch (err) {
       setError((err as Error).message);
     } finally {

@@ -1,7 +1,7 @@
 export type Identity = {
   userId: string;
   username: string;
-  type: "auth" | "guest";
+  type: "auth";
 };
 
 export type PeerInfo = {

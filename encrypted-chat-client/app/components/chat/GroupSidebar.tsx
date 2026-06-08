@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import { socket } from "@/core/socket/socket";
+import { connectSocket, socket } from "@/core/socket/socket";
 import { useIdentity } from "@/app/context/IdentityContext";
 import { exportRoomKey, getOrCreateRoomKey } from "@/core/crypto/encryption";
 
@@ -28,15 +28,15 @@ export default function GroupSidebar() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [newRoom, setNewRoom] = useState("");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [callError, setCallError] = useState<string | null>(null);
+  const [creatingCall, setCreatingCall] = useState(false);
 
   useEffect(() => {
     if (!identity) return;
 
-    socket.auth = identity;
-
-    if (!socket.connected) {
-      socket.connect();
-    }
+    void connectSocket(identity).catch((error) => {
+      console.error("[socket] failed to connect:", error);
+    });
   }, [identity]);
 
   useEffect(() => {
@@ -60,6 +60,11 @@ export default function GroupSidebar() {
       setRooms((prev) => prev.filter((room) => room.roomId !== roomId));
     };
 
+    const handleCallFailed = ({ message }: { message?: string }) => {
+      setCreatingCall(false);
+      setCallError(message || "Failed to create call");
+    };
+
     const handleInvite = async ({ roomId, intent, link }: InviteCreatedPayload) => {
       await getOrCreateRoomKey(roomId);
 
@@ -73,6 +78,8 @@ export default function GroupSidebar() {
       setInviteLink(inviteUrl);
 
       if (intent === "direct-call") {
+        setCreatingCall(false);
+        setCallError(null);
         router.push(`/chat?room=${roomId}&mode=call`);
       }
     };
@@ -80,12 +87,14 @@ export default function GroupSidebar() {
     socket.on("rooms_list", handleRooms);
     socket.on("room_created", handleCreated);
     socket.on("room_deleted", handleDeleted);
+    socket.on("call_create_failed", handleCallFailed);
     socket.on("invite_created", handleInvite);
 
     return () => {
       socket.off("rooms_list", handleRooms);
       socket.off("room_created", handleCreated);
       socket.off("room_deleted", handleDeleted);
+      socket.off("call_create_failed", handleCallFailed);
       socket.off("invite_created", handleInvite);
     };
   }, [identity, router]);
@@ -101,6 +110,7 @@ export default function GroupSidebar() {
       name: newRoom,
     });
 
+    void getOrCreateRoomKey(roomId);
     setNewRoom("");
   };
 
@@ -114,10 +124,22 @@ export default function GroupSidebar() {
     socket.emit("create_invite", { roomId, intent: "group" });
   };
 
-  const createCallInvite = () => {
-    socket.emit("create_call_invite", {
-      label: identity ? `${identity.username}'s private call` : "Private call",
-    });
+  const createCallInvite = async () => {
+    if (!identity || creatingCall) return;
+
+    setCreatingCall(true);
+    setCallError(null);
+
+    try {
+      await connectSocket(identity);
+      socket.emit("create_call_invite", {
+        label: `${identity.username}'s private call`,
+      });
+    } catch (error) {
+      console.error("[UI] create call failed:", error);
+      setCallError("Could not connect to create the call.");
+      setCreatingCall(false);
+    }
   };
 
   const copyInvite = async () => {
@@ -147,11 +169,14 @@ export default function GroupSidebar() {
       </div>
 
       <button
-        onClick={createCallInvite}
+        onClick={() => void createCallInvite()}
+        disabled={!identity || creatingCall}
         className="w-full text-sm bg-neutral-900 text-white p-2 rounded"
       >
-        Create call link
+        {creatingCall ? "Creating call..." : "Create call link"}
       </button>
+
+      {callError && <div className="text-sm text-red-600">{callError}</div>}
 
       <div className="space-y-2">
         {rooms.map((room) => (

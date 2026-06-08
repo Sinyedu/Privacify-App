@@ -17,20 +17,28 @@ export default function MessageInput({
   onEncryptedMessage,
 }: MessageInputProps) {
   const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const setDebug = useChatStore((s) => s.setDebug);
 
   const { identity } = useIdentity();
-
-  const isGuest = identity?.type === "guest";
 
   const handleSend = async () => {
     if (!text.trim()) return;
 
     const id = crypto.randomUUID();
-    const encrypted = await encrypt(text, roomId);
     const sender = identity?.username;
 
     if (!sender) return;
+
+    let encrypted: string;
+
+    try {
+      encrypted = await encrypt(text, roomId);
+      setError(null);
+    } catch {
+      setError("Missing room key. Ask for a fresh invite link and rejoin this room.");
+      return;
+    }
 
     setDebug({
       plaintext: text,
@@ -49,7 +57,6 @@ export default function MessageInput({
       roomId,
       text: encrypted,
       sender,
-      isGuest,
     });
 
     onEncryptedMessage(message);
@@ -57,20 +64,27 @@ export default function MessageInput({
   };
 
   return (
-    <div className="border-t p-3 flex gap-2">
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        className="flex-1 border rounded p-2"
-        placeholder="Type a message..."
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void handleSend();
-        }}
-      />
+    <div className="border-t p-3">
+      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
 
-      <button onClick={() => void handleSend()} className="px-4 rounded bg-black text-white">
-        Send
-      </button>
+      <div className="flex gap-2">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className="flex-1 border rounded p-2"
+          placeholder="Type a message..."
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void handleSend();
+          }}
+        />
+
+        <button
+          onClick={() => void handleSend()}
+          className="px-4 rounded bg-black text-white"
+        >
+          Send
+        </button>
+      </div>
     </div>
   );
 }

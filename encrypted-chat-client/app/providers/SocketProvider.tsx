@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect } from "react";
-import { socket } from "@/core/socket/socket";
+import { connectSocket, socket } from "@/core/socket/socket";
 import { useIdentity } from "@/app/context/IdentityContext";
 
 const SocketContext = createContext(socket);
@@ -14,11 +14,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
     console.log("[socket] connecting with identity:", identity);
 
-    socket.auth = identity;
-
-    if (!socket.connected) {
-      socket.connect();
-    }
+    void connectSocket(identity).catch((error) => {
+      console.error("[socket] failed to connect:", error);
+    });
 
     socket.on("connect", () => {
       console.log("[socket] connected:", socket.id);

@@ -6,7 +6,7 @@ export type RoomKind = 'group' | 'direct-call';
 export type RoomMember = {
   userId: string;
   username: string;
-  type: 'auth' | 'guest';
+  type: 'auth';
 };
 
 @Schema({ timestamps: true })
