@@ -3,6 +3,11 @@ import { Document } from 'mongoose';
 
 export type RoomDocument = Room & Document;
 export type RoomKind = 'group' | 'direct-call';
+export type RoomMember = {
+  userId: string;
+  username: string;
+  type: 'auth' | 'guest';
+};
 
 @Schema({ timestamps: true })
 export class Room {
@@ -17,6 +22,21 @@ export class Room {
 
   @Prop()
   maxParticipants?: number;
+
+  @Prop({ required: true })
+  ownerId: string;
+
+  @Prop({
+    type: [
+      {
+        userId: String,
+        username: String,
+        type: String,
+      },
+    ],
+    default: [],
+  })
+  members: RoomMember[];
 }
 
 export const RoomSchema = SchemaFactory.createForClass(Room);

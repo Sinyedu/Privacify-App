@@ -19,8 +19,8 @@ import EncryptionPanel from "../components/chat/EncryptionPanel";
 export default function ChatClient() {
   const params = useSearchParams();
   const router = useRouter();
-  const roomId = params.get("room") || "general";
-  const isCallMode = params.get("mode") === "call";
+  const roomId = params.get("room") || "";
+  const isCallMode = Boolean(roomId) && params.get("mode") === "call";
   const { identity } = useIdentity();
   const { localStream, error: mediaError } = useCallMedia(isCallMode);
   const [remoteStreamState, setRemoteStreamState] = useState<{
@@ -65,7 +65,7 @@ export default function ChatClient() {
   }, [roomId]);
 
   const endCall = useCallback(() => {
-    if (!isCallMode) return;
+    if (!isCallMode || !roomId) return;
 
     socket.emit("end_call", { roomId });
   }, [isCallMode, roomId]);
@@ -80,6 +80,11 @@ export default function ChatClient() {
   });
 
   useEffect(() => {
+    if (!roomId) {
+      useChatStore.getState().clearMessages();
+      return;
+    }
+
     const clearMessages = useChatStore.getState().clearMessages;
 
     clearMessages();
@@ -172,8 +177,16 @@ export default function ChatClient() {
             onEndCall={endCall}
           />
         )}
-        <MessageList />
-        <MessageInput roomId={roomId} onEncryptedMessage={broadcastMessage} />
+        {roomId ? (
+          <>
+            <MessageList />
+            <MessageInput roomId={roomId} onEncryptedMessage={broadcastMessage} />
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm text-neutral-500">
+            Select a room or create a private call.
+          </div>
+        )}
       </div>
       <EncryptionPanel peerCount={peerCount} />
     </div>

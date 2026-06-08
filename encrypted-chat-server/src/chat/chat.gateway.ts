@@ -59,11 +59,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('create_room')
-  async createRoom(@MessageBody() data: { roomId: string; name: string }) {
+  async createRoom(
+    @MessageBody() data: { roomId: string; name: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const identity = this.signalingService.getIdentity(client);
+    if (!identity) return;
+
+    const shortId = randomUUID().slice(0, 8);
     const room = await this.roomService.createRoom({
       roomId: data.roomId,
-      name: data.name,
+      name: `${data.name} #${shortId}`,
       kind: 'group',
+      owner: identity,
     });
 
     const payload = {
@@ -72,7 +80,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       kind: room.kind,
     };
 
-    this.server.emit('room_created', payload);
+    client.emit('room_created', payload);
   }
 
   @SubscribeMessage('join_room')
@@ -86,11 +94,33 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log('[gateway] join_room:', data.roomId, identity.username);
 
     const room = await this.roomService.findByRoomId(data.roomId);
+
+    if (!room) {
+      client.emit('room_join_blocked', {
+        roomId: data.roomId,
+        reason: 'room_missing',
+      });
+      return;
+    }
+
+    const isMember = await this.roomService.isMember(
+      data.roomId,
+      identity.userId,
+    );
+
+    if (!isMember) {
+      client.emit('room_join_blocked', {
+        roomId: data.roomId,
+        reason: 'not_member',
+      });
+      return;
+    }
+
     const isRoomFull = await this.signalingService.isRoomFull(
       this.server,
       client,
       data.roomId,
-      room?.maxParticipants,
+      room.maxParticipants,
     );
 
     if (isRoomFull) {
@@ -134,7 +164,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('get_rooms')
   async getRooms(@ConnectedSocket() client: Socket) {
-    const rooms = await this.roomService.getRooms();
+    const identity = this.signalingService.getIdentity(client);
+    if (!identity) return;
+
+    const rooms = await this.roomService.getRoomsForMember(identity.userId);
 
     client.emit(
       'rooms_list',
@@ -160,6 +193,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     if (!identity) {
       console.log('[gateway] blocked message (no identity)');
+      return;
+    }
+
+    const isMember = await this.roomService.isMember(
+      payload.roomId,
+      identity.userId,
+    );
+
+    if (!isMember) {
       return;
     }
 
@@ -192,6 +234,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log('[gateway] create_invite:', identity.username);
 
     const intent = data.intent ?? 'group';
+    const isMember = await this.roomService.isMember(
+      data.roomId,
+      identity.userId,
+    );
+
+    if (!isMember) return;
+
     const token = await this.inviteService.createInvite(data.roomId, intent);
 
     client.emit('invite_created', {
@@ -218,9 +267,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       name: `${label} #${shortId}`,
       kind: 'direct-call',
       maxParticipants: 2,
+      owner: identity,
     });
 
-    this.server.emit('room_created', {
+    client.emit('room_created', {
       roomId: room.roomId,
       name: room.name,
       kind: room.kind,

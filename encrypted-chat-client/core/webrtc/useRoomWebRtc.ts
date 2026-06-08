@@ -40,7 +40,7 @@ export function useRoomWebRtc({
   }, [socket]);
 
   useEffect(() => {
-    if (!identity || !isConnected) return;
+    if (!identity || !isConnected || !roomId) return;
 
     const session = new RoomWebRtcSession({
       socket,

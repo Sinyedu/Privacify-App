@@ -23,7 +23,7 @@ export default function GroupSidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const currentRoom = searchParams.get("room") || "general";
+  const currentRoom = searchParams.get("room");
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [newRoom, setNewRoom] = useState("");
@@ -93,7 +93,8 @@ export default function GroupSidebar() {
   const createRoom = () => {
     if (!newRoom.trim()) return;
 
-    const roomId = newRoom.trim().toLowerCase().replace(/\s+/g, "-");
+    const slug = newRoom.trim().toLowerCase().replace(/\s+/g, "-");
+    const roomId = `${slug}-${crypto.randomUUID().slice(0, 8)}`;
 
     socket.emit("create_room", {
       roomId,

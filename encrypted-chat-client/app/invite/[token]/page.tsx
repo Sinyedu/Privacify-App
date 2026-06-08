@@ -3,18 +3,20 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { importRoomKey } from "@/core/crypto/encryption";
+import { useIdentity } from "@/app/context/IdentityContext";
 
 export default function InvitePage() {
   const { token } = useParams();
   const router = useRouter();
+  const { identity, setIdentity } = useIdentity();
   const [loading, setLoading] = useState(true);
   const API_URL = process.env.NEXT_PUBLIC_API_URL!;
+
   useEffect(() => {
     async function run() {
-      // 🔐 NEW UNIFIED IDENTITY SYSTEM
-      const stored = localStorage.getItem("identity");
+      let activeIdentity = identity;
 
-      if (!stored) {
+      if (!activeIdentity) {
         const choice = confirm(
           "You are not logged in.\n\nOK = Continue as guest\nCancel = Login",
         );
@@ -32,18 +34,21 @@ export default function InvitePage() {
           return;
         }
 
-        localStorage.setItem(
-          "identity",
-          JSON.stringify({
-            userId: crypto.randomUUID(),
-            username,
-            type: "guest",
-          }),
-        );
+        activeIdentity = {
+          userId: crypto.randomUUID(),
+          username,
+          type: "guest",
+        };
+
+        setIdentity(activeIdentity);
       }
 
       try {
-        const res = await fetch(`${API_URL}/invite/${token}`);
+        const res = await fetch(`${API_URL}/invite/${token}/accept`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identity: activeIdentity }),
+        });
 
         const data = await res.json();
 
@@ -70,7 +75,7 @@ export default function InvitePage() {
     }
 
     run();
-  }, [API_URL, router, token]);
+  }, [API_URL, identity, router, setIdentity, token]);
 
   return (
     <div className="h-screen flex items-center justify-center">
