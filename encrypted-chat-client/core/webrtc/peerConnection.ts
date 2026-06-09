@@ -5,11 +5,7 @@ import type {
   WebRtcSignalPayload,
   WebRtcSignalType,
 } from "./types";
-
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-];
+import { getIceServers } from "./iceServers";
 
 type PeerConnectionOptions = {
   socket: Socket;
@@ -24,16 +20,18 @@ type PeerConnectionOptions = {
 };
 
 export class PeerConnection {
-  private readonly connection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  private readonly connection = new RTCPeerConnection({
+    iceServers: getIceServers(),
+  });
   private channel?: RTCDataChannel;
   private readonly remoteStream = new MediaStream();
+  private readonly pendingCandidates: RTCIceCandidateInit[] = [];
+  private readonly trackSenders = new Map<string, RTCRtpSender>();
+  private makingOffer = false;
+  private ignoreOffer = false;
 
   constructor(private readonly options: PeerConnectionOptions) {
-    options.localStream?.getTracks().forEach((track) => {
-      if (options.localStream) {
-        this.connection.addTrack(track, options.localStream);
-      }
-    });
+    this.setLocalStream(options.localStream ?? null);
 
     this.connection.onicecandidate = (event) => {
       if (!event.candidate) return;
@@ -41,9 +39,13 @@ export class PeerConnection {
     };
 
     this.connection.onconnectionstatechange = () => {
-      if (["closed", "disconnected", "failed"].includes(this.connection.connectionState)) {
+      if (["closed", "failed"].includes(this.connection.connectionState)) {
         this.options.onClose();
       }
+    };
+
+    this.connection.onnegotiationneeded = () => {
+      void this.createOffer();
     };
 
     this.connection.ondatachannel = (event) => {
@@ -64,15 +66,33 @@ export class PeerConnection {
   }
 
   async createOffer() {
-    const offer = await this.connection.createOffer();
-    await this.connection.setLocalDescription(offer);
-    this.sendSignal("offer", offer);
+    if (this.makingOffer || this.connection.signalingState !== "stable") return;
+
+    try {
+      this.makingOffer = true;
+      const offer = await this.connection.createOffer();
+      await this.connection.setLocalDescription(offer);
+      this.sendSignal("offer", offer);
+    } finally {
+      this.makingOffer = false;
+    }
   }
 
   async handleSignal(signal: WebRtcSignal) {
     switch (signal.type) {
       case "offer": {
+        const offerCollision =
+          this.makingOffer || this.connection.signalingState !== "stable";
+
+        this.ignoreOffer = offerCollision && this.options.initiator;
+        if (this.ignoreOffer) return;
+
+        if (offerCollision) {
+          await this.connection.setLocalDescription({ type: "rollback" });
+        }
+
         await this.connection.setRemoteDescription(signal.payload);
+        await this.flushPendingCandidates();
         const answer = await this.connection.createAnswer();
         await this.connection.setLocalDescription(answer);
         this.sendSignal("answer", answer);
@@ -80,10 +100,22 @@ export class PeerConnection {
       }
       case "answer":
         await this.connection.setRemoteDescription(signal.payload);
+        await this.flushPendingCandidates();
         return;
       case "ice-candidate":
-        await this.connection.addIceCandidate(signal.payload);
+        await this.addIceCandidate(signal.payload);
     }
+  }
+
+  setLocalStream(stream: MediaStream | null) {
+    if (!stream) return;
+
+    stream.getTracks().forEach((track) => {
+      if (this.trackSenders.has(track.id)) return;
+
+      const sender = this.connection.addTrack(track, stream);
+      this.trackSenders.set(track.id, sender);
+    });
   }
 
   send(message: PeerDataMessage): boolean {
@@ -105,6 +137,27 @@ export class PeerConnection {
       this.options.onDataMessage(JSON.parse(event.data) as PeerDataMessage);
     };
     channel.onclose = this.options.onClose;
+  }
+
+  private async addIceCandidate(candidate: RTCIceCandidateInit) {
+    if (!this.connection.remoteDescription) {
+      this.pendingCandidates.push(candidate);
+      return;
+    }
+
+    try {
+      await this.connection.addIceCandidate(candidate);
+    } catch (error) {
+      if (!this.ignoreOffer) throw error;
+    }
+  }
+
+  private async flushPendingCandidates() {
+    const candidates = this.pendingCandidates.splice(0);
+
+    for (const candidate of candidates) {
+      await this.addIceCandidate(candidate);
+    }
   }
 
   private sendSignal(type: WebRtcSignalType, payload: WebRtcSignalPayload) {

@@ -26,8 +26,10 @@ type RoomSessionOptions = {
 export class RoomWebRtcSession {
   private readonly peers = new Map<string, PeerConnection>();
   private readonly stopKeyListener: () => void;
+  private localStream: MediaStream | null;
 
   constructor(private readonly options: RoomSessionOptions) {
+    this.localStream = options.localStream ?? null;
     this.stopKeyListener = onRoomKeyImported((roomId) => {
       if (roomId === this.options.roomId) void this.shareRoomKey();
     });
@@ -39,6 +41,11 @@ export class RoomWebRtcSession {
     peers.forEach((peer) => {
       void this.connectToPeer(peer.socketId);
     });
+  };
+
+  handlePeerJoined = ({ roomId, socketId }: { roomId: string; socketId: string }) => {
+    if (roomId !== this.options.roomId) return;
+    this.ensurePeer(socketId, false);
   };
 
   handleSignal = (signal: WebRtcSignal) => {
@@ -59,6 +66,14 @@ export class RoomWebRtcSession {
         type: "encrypted_message",
         ...message,
       });
+    });
+  }
+
+  setLocalStream(stream: MediaStream | null) {
+    this.localStream = stream;
+
+    this.peers.forEach((peer) => {
+      peer.setLocalStream(stream);
     });
   }
 
@@ -83,7 +98,7 @@ export class RoomWebRtcSession {
       roomId: this.options.roomId,
       peerId,
       initiator,
-      localStream: this.options.localStream,
+      localStream: this.localStream,
       onDataMessage: (message) => void this.handleDataMessage(message),
       onRemoteStream: this.options.onRemoteStream,
       onOpen: () => void this.shareRoomKey(),
