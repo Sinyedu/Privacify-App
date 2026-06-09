@@ -19,6 +19,16 @@ export class RoomService {
     private roomModel: Model<RoomDocument>,
   ) {}
 
+  private membershipFilter(userId: string) {
+    return {
+      $or: [
+        { 'members.userId': userId },
+        { ownerId: userId },
+        { $expr: { $in: [userId, { $ifNull: ['$members', []] }] } },
+      ],
+    };
+  }
+
   async createRoom(input: CreateRoomInput) {
     const { roomId, name, kind = 'group', maxParticipants, owner } = input;
     const existing = await this.roomModel.findOne({ roomId });
@@ -37,7 +47,7 @@ export class RoomService {
 
   async getRoomsForMember(userId: string) {
     return this.roomModel
-      .find({ 'members.userId': userId })
+      .find(this.membershipFilter(userId))
       .sort({ createdAt: -1 });
   }
 
@@ -52,24 +62,23 @@ export class RoomService {
   async isMember(roomId: string, userId: string) {
     const room = await this.roomModel.exists({
       roomId,
-      'members.userId': userId,
+      ...this.membershipFilter(userId),
     });
 
     return Boolean(room);
   }
 
   async addMember(roomId: string, member: RoomMember) {
+    const isMember = await this.isMember(roomId, member.userId);
+
+    if (isMember) {
+      return this.findByRoomId(roomId);
+    }
+
     return this.roomModel.findOneAndUpdate(
-      {
-        roomId,
-        'members.userId': { $ne: member.userId },
-      },
-      {
-        $push: { members: member },
-      },
-      {
-        new: true,
-      },
+      { roomId },
+      { $push: { members: member } },
+      { new: true },
     );
   }
 }

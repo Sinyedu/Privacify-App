@@ -4,6 +4,7 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  Ack,
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
@@ -16,6 +17,51 @@ import { RoomService } from '../room/room.service';
 import type { Identity, WebRtcSignalPayload } from './chat.types';
 import { SignalingService } from './signaling.service';
 import { getCorsOrigin } from '../config/cors';
+
+type SocketAck<T> = (response: T) => void;
+
+type RoomCreatedPayload = {
+  roomId: string;
+  name: string;
+  kind: 'group' | 'direct-call';
+};
+
+type InviteCreatedPayload = {
+  roomId: string;
+  intent: 'group' | 'direct-call';
+  link: string;
+};
+
+type CreateRoomAck =
+  | {
+      ok: true;
+      room: RoomCreatedPayload;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+type CreateCallAck =
+  | {
+      ok: true;
+      room: RoomCreatedPayload;
+      invite: InviteCreatedPayload;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+type CreateInviteAck =
+  | {
+      ok: true;
+      invite: InviteCreatedPayload;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
 
 @WebSocketGateway({
   cors: {
@@ -66,12 +112,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async createRoom(
     @MessageBody() data: { roomId: string; name: string },
     @ConnectedSocket() client: Socket,
+    @Ack() ack?: SocketAck<CreateRoomAck>,
   ) {
     const identity = this.signalingService.getIdentity(client);
     if (!identity) {
-      client.emit('room_create_failed', {
-        message: 'Missing socket identity. Reconnect and try again.',
-      });
+      const message = 'Missing socket identity. Reconnect and try again.';
+      client.emit('room_create_failed', { message });
+      ack?.({ ok: false, message });
+      return;
+    }
+
+    if (!data.name?.trim() || !data.roomId?.trim()) {
+      const message = 'Group name is required.';
+      client.emit('room_create_failed', { message });
+      ack?.({ ok: false, message });
       return;
     }
 
@@ -91,11 +145,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       };
 
       client.emit('room_created', payload);
+      ack?.({ ok: true, room: payload });
     } catch (error) {
       console.error('[gateway] create_room failed:', error);
-      client.emit('room_create_failed', {
-        message: 'Could not create the group. Try again.',
-      });
+      const message = 'Could not create the group. Try again.';
+      client.emit('room_create_failed', { message });
+      ack?.({ ok: false, message });
     }
   }
 
@@ -242,9 +297,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async createInvite(
     @MessageBody() data: { roomId: string; intent?: 'group' | 'direct-call' },
     @ConnectedSocket() client: Socket,
+    @Ack() ack?: SocketAck<CreateInviteAck>,
   ) {
     const identity = this.signalingService.getIdentity(client);
-    if (!identity) return;
+    if (!identity) {
+      const message = 'Missing socket identity. Reconnect and try again.';
+      ack?.({ ok: false, message });
+      return;
+    }
 
     console.log('[gateway] create_invite:', identity.username);
 
@@ -254,27 +314,34 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       identity.userId,
     );
 
-    if (!isMember) return;
+    if (!isMember) {
+      const message = 'You are not a member of this group.';
+      ack?.({ ok: false, message });
+      return;
+    }
 
     const token = await this.inviteService.createInvite(data.roomId, intent);
-
-    client.emit('invite_created', {
+    const invite = {
       roomId: data.roomId,
       intent,
       link: `/invite/${token}`,
-    });
+    };
+
+    client.emit('invite_created', invite);
+    ack?.({ ok: true, invite });
   }
 
   @SubscribeMessage('create_call_invite')
   async createCallInvite(
     @MessageBody() data: { label?: string },
     @ConnectedSocket() client: Socket,
+    @Ack() ack?: SocketAck<CreateCallAck>,
   ) {
     const identity = this.signalingService.getIdentity(client);
     if (!identity) {
-      client.emit('call_create_failed', {
-        message: 'Missing socket identity. Reconnect and try again.',
-      });
+      const message = 'Missing socket identity. Reconnect and try again.';
+      client.emit('call_create_failed', { message });
+      ack?.({ ok: false, message });
       return;
     }
 
@@ -291,27 +358,32 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         owner: identity,
       });
 
-      client.emit('room_created', {
+      const roomPayload = {
         roomId: room.roomId,
         name: room.name,
         kind: room.kind,
-      });
+      };
+
+      client.emit('room_created', roomPayload);
 
       const token = await this.inviteService.createInvite(
         room.roomId,
         'direct-call',
       );
 
-      client.emit('invite_created', {
+      const invitePayload: InviteCreatedPayload = {
         roomId: room.roomId,
         intent: 'direct-call',
         link: `/invite/${token}`,
-      });
+      };
+
+      client.emit('invite_created', invitePayload);
+      ack?.({ ok: true, room: roomPayload, invite: invitePayload });
     } catch (error) {
       console.error('[gateway] create_call_invite failed:', error);
-      client.emit('call_create_failed', {
-        message: 'Could not create the call. Try again.',
-      });
+      const message = 'Could not create the call. Try again.';
+      client.emit('call_create_failed', { message });
+      ack?.({ ok: false, message });
     }
   }
 

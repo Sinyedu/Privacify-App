@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 type User = {
   id: string;
@@ -40,19 +40,20 @@ function decodeUser(token: string): User | null {
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [token, setToken] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("token");
-  });
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
 
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window === "undefined") return null;
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const stored = localStorage.getItem("token");
+      if (!stored) return;
 
-    const stored = localStorage.getItem("token");
-    if (!stored) return null;
+      setToken(stored);
+      setUser(decodeUser(stored));
+    }, 0);
 
-    return decodeUser(stored);
-  });
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   const login = (newToken: string) => {
     localStorage.setItem("token", newToken);

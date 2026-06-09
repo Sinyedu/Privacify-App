@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Schema as MongooseSchema } from 'mongoose';
 
 export type RoomDocument = Room & Document;
 export type RoomKind = 'group' | 'direct-call';
@@ -8,6 +8,15 @@ export type RoomMember = {
   username: string;
   type: 'auth';
 };
+
+const RoomMemberSchema = new MongooseSchema<RoomMember>(
+  {
+    userId: { type: String, required: true },
+    username: { type: String, required: true },
+    type: { type: String, required: true, enum: ['auth'] },
+  },
+  { _id: false },
+);
 
 @Schema({ timestamps: true })
 export class Room {
@@ -27,13 +36,7 @@ export class Room {
   ownerId: string;
 
   @Prop({
-    type: [
-      {
-        userId: String,
-        username: String,
-        type: String,
-      },
-    ],
+    type: [RoomMemberSchema],
     default: [],
   })
   members: RoomMember[];

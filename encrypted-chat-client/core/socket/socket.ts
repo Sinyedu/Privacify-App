@@ -58,6 +58,8 @@ export async function connectSocket(identity: SocketIdentity): Promise<void> {
       window.clearTimeout(timeout);
       socket.off("connect", handleConnect);
       socket.off("connect_error", handleError);
+      socket.off("auth_required", handleAuthRequired);
+      socket.off("disconnect", handleDisconnect);
     };
 
     const handleConnect = () => {
@@ -71,8 +73,20 @@ export async function connectSocket(identity: SocketIdentity): Promise<void> {
       reject(error);
     };
 
+    const handleAuthRequired = () => {
+      cleanup();
+      reject(new Error("Socket authentication required"));
+    };
+
+    const handleDisconnect = (reason: string) => {
+      cleanup();
+      reject(new Error(`Socket disconnected before connect: ${reason}`));
+    };
+
     socket.once("connect", handleConnect);
     socket.once("connect_error", handleError);
+    socket.once("auth_required", handleAuthRequired);
+    socket.once("disconnect", handleDisconnect);
     socket.connect();
   });
 }
