@@ -9,7 +9,6 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 
-import { randomUUID } from 'crypto';
 import { Server, Socket } from 'socket.io';
 import { MessageService } from '../messages/message.service';
 import { InviteService } from '../invite/invite.service';
@@ -17,51 +16,14 @@ import { RoomService } from '../room/room.service';
 import type { Identity, WebRtcSignalPayload } from './chat.types';
 import { SignalingService } from './signaling.service';
 import { getCorsOrigin } from '../config/cors';
+import {
+  ChatRoomCommandService,
+  CreateCallResult,
+  CreateInviteResult,
+  CreateRoomResult,
+} from './chat-room-command.service';
 
 type SocketAck<T> = (response: T) => void;
-
-type RoomCreatedPayload = {
-  roomId: string;
-  name: string;
-  kind: 'group' | 'direct-call';
-};
-
-type InviteCreatedPayload = {
-  roomId: string;
-  intent: 'group' | 'direct-call';
-  link: string;
-};
-
-type CreateRoomAck =
-  | {
-      ok: true;
-      room: RoomCreatedPayload;
-    }
-  | {
-      ok: false;
-      message: string;
-    };
-
-type CreateCallAck =
-  | {
-      ok: true;
-      room: RoomCreatedPayload;
-      invite: InviteCreatedPayload;
-    }
-  | {
-      ok: false;
-      message: string;
-    };
-
-type CreateInviteAck =
-  | {
-      ok: true;
-      invite: InviteCreatedPayload;
-    }
-  | {
-      ok: false;
-      message: string;
-    };
 
 @WebSocketGateway({
   cors: {
@@ -78,6 +40,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly inviteService: InviteService,
     private readonly roomService: RoomService,
     private readonly signalingService: SignalingService,
+    private readonly roomCommands: ChatRoomCommandService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -112,7 +75,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async createRoom(
     @MessageBody() data: { roomId: string; name: string },
     @ConnectedSocket() client: Socket,
-    @Ack() ack?: SocketAck<CreateRoomAck>,
+    @Ack() ack?: SocketAck<CreateRoomResult>,
   ) {
     const identity = this.signalingService.getIdentity(client);
     if (!identity) {
@@ -122,30 +85,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    if (!data.name?.trim() || !data.roomId?.trim()) {
-      const message = 'Group name is required.';
-      client.emit('room_create_failed', { message });
-      ack?.({ ok: false, message });
-      return;
-    }
-
     try {
-      const shortId = randomUUID().slice(0, 8);
-      const room = await this.roomService.createRoom({
-        roomId: data.roomId,
-        name: `${data.name} #${shortId}`,
-        kind: 'group',
-        owner: identity,
-      });
+      const result = await this.roomCommands.createGroupRoom(identity, data);
 
-      const payload = {
-        roomId: room.roomId,
-        name: room.name,
-        kind: room.kind,
-      };
+      if (result.ok) {
+        client.emit('room_created', result.room);
+      } else {
+        client.emit('room_create_failed', { message: result.message });
+      }
 
-      client.emit('room_created', payload);
-      ack?.({ ok: true, room: payload });
+      ack?.(result);
     } catch (error) {
       console.error('[gateway] create_room failed:', error);
       const message = 'Could not create the group. Try again.';
@@ -297,7 +246,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async createInvite(
     @MessageBody() data: { roomId: string; intent?: 'group' | 'direct-call' },
     @ConnectedSocket() client: Socket,
-    @Ack() ack?: SocketAck<CreateInviteAck>,
+    @Ack() ack?: SocketAck<CreateInviteResult>,
   ) {
     const identity = this.signalingService.getIdentity(client);
     if (!identity) {
@@ -308,34 +257,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     console.log('[gateway] create_invite:', identity.username);
 
-    const intent = data.intent ?? 'group';
-    const isMember = await this.roomService.isMember(
-      data.roomId,
-      identity.userId,
-    );
+    const result = await this.roomCommands.createGroupInvite(identity, data);
 
-    if (!isMember) {
-      const message = 'You are not a member of this group.';
-      ack?.({ ok: false, message });
-      return;
+    if (result.ok) {
+      client.emit('invite_created', result.invite);
     }
 
-    const token = await this.inviteService.createInvite(data.roomId, intent);
-    const invite = {
-      roomId: data.roomId,
-      intent,
-      link: `/invite/${token}`,
-    };
-
-    client.emit('invite_created', invite);
-    ack?.({ ok: true, invite });
+    ack?.(result);
   }
 
   @SubscribeMessage('create_call_invite')
   async createCallInvite(
     @MessageBody() data: { label?: string },
     @ConnectedSocket() client: Socket,
-    @Ack() ack?: SocketAck<CreateCallAck>,
+    @Ack() ack?: SocketAck<CreateCallResult>,
   ) {
     const identity = this.signalingService.getIdentity(client);
     if (!identity) {
@@ -346,39 +281,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     try {
-      const callId = randomUUID();
-      const label = data.label?.trim() || `${identity.username}'s private call`;
-      const shortId = callId.slice(0, 8);
+      const result = await this.roomCommands.createDirectCall(identity, data);
 
-      const room = await this.roomService.createRoom({
-        roomId: `call-${callId}`,
-        name: `${label} #${shortId}`,
-        kind: 'direct-call',
-        maxParticipants: 2,
-        owner: identity,
-      });
+      if (result.ok) {
+        client.emit('room_created', result.room);
+        client.emit('invite_created', result.invite);
+      }
 
-      const roomPayload = {
-        roomId: room.roomId,
-        name: room.name,
-        kind: room.kind,
-      };
-
-      client.emit('room_created', roomPayload);
-
-      const token = await this.inviteService.createInvite(
-        room.roomId,
-        'direct-call',
-      );
-
-      const invitePayload: InviteCreatedPayload = {
-        roomId: room.roomId,
-        intent: 'direct-call',
-        link: `/invite/${token}`,
-      };
-
-      client.emit('invite_created', invitePayload);
-      ack?.({ ok: true, room: roomPayload, invite: invitePayload });
+      ack?.(result);
     } catch (error) {
       console.error('[gateway] create_call_invite failed:', error);
       const message = 'Could not create the call. Try again.';

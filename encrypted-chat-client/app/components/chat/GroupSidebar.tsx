@@ -3,49 +3,13 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState, useEffect } from "react";
 import { connectSocket, socket } from "@/core/socket/socket";
+import { emitWithAck } from "@/core/socket/emit-with-ack";
 import { useIdentity } from "@/app/context/IdentityContext";
 import { exportRoomKey, getOrCreateRoomKey } from "@/core/crypto/encryption";
-
-type Room = {
-  roomId: string;
-  name: string;
-  kind?: "group" | "direct-call";
-};
-
-type InviteCreatedPayload = {
-  roomId: string;
-  intent?: "group" | "direct-call";
-  link: string;
-};
-
-type SocketAck<T> =
-  | ({ ok: true } & T)
-  | {
-      ok: false;
-      message?: string;
-    };
-
-function emitWithAck<T>(event: string, payload: unknown): Promise<SocketAck<T>> {
-  return new Promise((resolve, reject) => {
-    socket.timeout(7000).emit(
-      event,
-      payload,
-      (error: Error | null, response?: SocketAck<T>) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        if (!response) {
-          reject(new Error("Server did not return a response."));
-          return;
-        }
-
-        resolve(response);
-      },
-    );
-  });
-}
+import { buildInviteUrl } from "@/core/invite/invite-key";
+import InviteLinkBox from "./InviteLinkBox";
+import RoomList from "./RoomList";
+import type { InviteCreatedPayload, Room } from "./sidebar-types";
 
 export default function GroupSidebar() {
   const { identity } = useIdentity();
@@ -75,10 +39,7 @@ export default function GroupSidebar() {
       await getOrCreateRoomKey(roomId);
 
       const roomKey = await exportRoomKey(roomId);
-      const baseInviteUrl = new URL(link, window.location.origin).toString();
-      const inviteUrl = roomKey
-        ? `${baseInviteUrl}#key=${encodeURIComponent(roomKey)}`
-        : baseInviteUrl;
+      const inviteUrl = buildInviteUrl(link, roomKey);
 
       console.log("[UI] invite received:", inviteUrl);
       setInviteLink(inviteUrl);
@@ -295,65 +256,15 @@ export default function GroupSidebar() {
 
       {callError && <div className="text-sm text-red-600">{callError}</div>}
 
-      <div className="space-y-2">
-        {rooms.map((room) => (
-          <div
-            key={room.roomId}
-            className={[
-              "p-2 rounded cursor-pointer flex justify-between items-center border",
-              currentRoom === room.roomId
-                ? room.kind === "direct-call"
-                  ? "bg-neutral-950 text-white border-neutral-950"
-                  : "bg-gray-900 text-white border-gray-900"
-                : "border-transparent hover:bg-gray-100",
-            ].join(" ")}
-          >
-            <span onClick={() => joinRoomFromList(room)} className="min-w-0">
-              {room.name}
-              {room.kind === "direct-call" && (
-                <span
-                  className={[
-                    "ml-2 text-[10px] uppercase",
-                    currentRoom === room.roomId ? "text-red-300" : "text-gray-500",
-                  ].join(" ")}
-                >
-                  call
-                </span>
-              )}
-            </span>
-
-            {room.kind !== "direct-call" && (
-              <button
-                onClick={() => void createInvite(room.roomId)}
-                className={[
-                  "text-xs",
-                  currentRoom === room.roomId ? "text-blue-200" : "text-blue-500",
-                ].join(" ")}
-              >
-                invite
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+      <RoomList
+        rooms={rooms}
+        currentRoom={currentRoom}
+        onJoinRoom={joinRoomFromList}
+        onCreateInvite={(roomId) => void createInvite(roomId)}
+      />
 
       {inviteLink && (
-        <div className="mt-4 p-2 border rounded bg-gray-50">
-          <p className="text-xs mb-2">Invite link ready:</p>
-
-          <input
-            className="w-full text-xs p-1 border rounded"
-            value={inviteLink}
-            readOnly
-          />
-
-          <button
-            onClick={copyInvite}
-            className="mt-2 w-full text-xs bg-black text-white p-1 rounded"
-          >
-            Copy link
-          </button>
-        </div>
+        <InviteLinkBox inviteLink={inviteLink} onCopy={() => void copyInvite()} />
       )}
     </div>
   );

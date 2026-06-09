@@ -19,7 +19,6 @@ export class InviteService {
       token,
       roomId,
       intent,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
     return token;
@@ -29,7 +28,6 @@ export class InviteService {
     const invite = await this.inviteModel.findOne({ token });
 
     if (!invite) return null;
-    if (invite.expiresAt && invite.expiresAt < new Date()) return null;
 
     return {
       roomId: invite.roomId,

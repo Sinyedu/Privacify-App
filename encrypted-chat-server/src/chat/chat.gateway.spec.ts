@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { InviteService } from '../invite/invite.service';
 import { MessageService } from '../messages/message.service';
 import { RoomService } from '../room/room.service';
+import { ChatRoomCommandService } from './chat-room-command.service';
 import { ChatGateway } from './chat.gateway';
 import { SignalingService } from './signaling.service';
 
@@ -13,6 +14,7 @@ describe('ChatGateway', () => {
       providers: [
         ChatGateway,
         SignalingService,
+        ChatRoomCommandService,
         {
           provide: MessageService,
           useValue: {},

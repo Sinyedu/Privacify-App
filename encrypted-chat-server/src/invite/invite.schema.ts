@@ -14,9 +14,6 @@ export class Invite {
 
   @Prop({ default: 'group' })
   intent: InviteIntent;
-
-  @Prop()
-  expiresAt?: Date;
 }
 
 export const InviteSchema = SchemaFactory.createForClass(Invite);

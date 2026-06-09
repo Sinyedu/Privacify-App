@@ -32,7 +32,11 @@ export class InviteController {
       return { valid: false };
     }
 
-    await this.roomService.addMember(invite.roomId, body.identity);
+    const room = await this.roomService.addMember(invite.roomId, body.identity);
+
+    if (!room) {
+      return { valid: false };
+    }
 
     return { valid: true, roomId: invite.roomId, intent: invite.intent };
   }

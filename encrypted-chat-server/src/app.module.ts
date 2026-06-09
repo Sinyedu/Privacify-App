@@ -5,6 +5,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ChatGateway } from './chat/chat.gateway';
+import { ChatRoomCommandService } from './chat/chat-room-command.service';
 import { SignalingService } from './chat/signaling.service';
 import { MessageModule } from './messages/message.module';
 import { InvitesModule } from './invite/invite.module';
@@ -23,6 +24,6 @@ import { RoomModule } from './room/room.module';
     InvitesModule,
     RoomModule,
   ],
-  providers: [ChatGateway, SignalingService],
+  providers: [ChatGateway, SignalingService, ChatRoomCommandService],
 })
 export class AppModule {}

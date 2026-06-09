@@ -3,7 +3,7 @@
 import { createContext, useContext, useMemo } from "react";
 import { useAuth } from "./AuthContext";
 
-type Identity = {
+export type Identity = {
   userId: string;
   username: string;
   type: "auth";
