@@ -19,7 +19,7 @@ export default function GroupSidebar() {
   );
 
   const openCall = useCallback(
-    (roomId: string) => router.push(`/chat?room=${roomId}&mode=call`),
+    (roomId: string) => router.push(`/calls/${roomId}`),
     [router],
   );
 
@@ -38,6 +38,7 @@ export default function GroupSidebar() {
     roomError,
     createInvite,
     leaveGroup,
+    deleteCall,
     copyInvite,
   } = useRoomManager({
     onOpenGroup: openGroup,
@@ -56,6 +57,11 @@ export default function GroupSidebar() {
 
   const selectedRoom = rooms.find((room) => room.roomId === currentRoom);
 
+  const createRoomInvite = (room: Room) => {
+    const intent = room.kind === "direct-call" ? "direct-call" : "group";
+    void createInvite(room.roomId, intent);
+  };
+
   return (
     <div className="w-64 border-r p-3 flex flex-col gap-3">
       <h2 className="font-bold">Rooms</h2>
@@ -66,8 +72,9 @@ export default function GroupSidebar() {
         rooms={rooms}
         currentRoom={currentRoom}
         onJoinRoom={joinRoomFromList}
-        onCreateInvite={(roomId) => void createInvite(roomId)}
+        onCreateInvite={createRoomInvite}
         onLeaveRoom={(roomId) => void leaveGroup(roomId)}
+        onDeleteCall={(roomId) => void deleteCall(roomId)}
       />
 
       <RoomMembers room={selectedRoom} />

@@ -64,6 +64,16 @@ export type LeaveGroupResult =
       message: string;
     };
 
+export type DeleteCallResult =
+  | {
+      ok: true;
+      roomId: string;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
 @Injectable()
 export class ChatRoomCommandService {
   constructor(
@@ -110,7 +120,7 @@ export class ChatRoomCommandService {
     );
 
     if (!isMember) {
-      return { ok: false, message: 'You are not a member of this group.' };
+      return { ok: false, message: 'You are not a member of this room.' };
     }
 
     const token = await this.inviteService.createInvite(data.roomId, intent);
@@ -192,6 +202,35 @@ export class ChatRoomCommandService {
       ok: true,
       roomId: result.roomId,
       deleted: result.deleted,
+    };
+  }
+
+  async deleteOwnCall(
+    identity: Identity,
+    data: { roomId: string },
+  ): Promise<DeleteCallResult> {
+    const room = await this.roomService.findByRoomId(data.roomId);
+
+    if (!room || room.kind !== 'direct-call') {
+      return { ok: false, message: 'Call room not found.' };
+    }
+
+    if (room.ownerId !== identity.userId) {
+      return {
+        ok: false,
+        message: 'Only the call owner can delete this call.',
+      };
+    }
+
+    await Promise.all([
+      this.inviteService.deleteByRoomId(data.roomId),
+      this.messageService.deleteByRoom(data.roomId),
+      this.roomService.deleteByRoomId(data.roomId),
+    ]);
+
+    return {
+      ok: true,
+      roomId: data.roomId,
     };
   }
 }

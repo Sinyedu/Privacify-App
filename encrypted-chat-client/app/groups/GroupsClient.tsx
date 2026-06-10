@@ -13,6 +13,7 @@ type RoomSectionProps = {
   onOpenRoom: (room: Room) => void;
   onCreateInvite: (roomId: string) => void;
   onLeaveRoom: (roomId: string) => void;
+  onDeleteCall: (roomId: string) => void;
 };
 
 function RoomSection({
@@ -22,6 +23,7 @@ function RoomSection({
   onOpenRoom,
   onCreateInvite,
   onLeaveRoom,
+  onDeleteCall,
 }: RoomSectionProps) {
   return (
     <section className="space-y-3">
@@ -63,20 +65,26 @@ function RoomSection({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  {room.kind !== "direct-call" && (
-                    <button
-                      onClick={() => onCreateInvite(room.roomId)}
-                      className="rounded border border-neutral-300 px-3 py-2 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
-                    >
-                      Invite
-                    </button>
-                  )}
+                  <button
+                    onClick={() => onCreateInvite(room.roomId)}
+                    className="rounded border border-neutral-300 px-3 py-2 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900"
+                  >
+                    Invite
+                  </button>
                   {room.kind !== "direct-call" && (
                     <button
                       onClick={() => onLeaveRoom(room.roomId)}
                       className="rounded border border-red-300 px-3 py-2 text-xs text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
                     >
                       Leave
+                    </button>
+                  )}
+                  {room.kind === "direct-call" && (
+                    <button
+                      onClick={() => onDeleteCall(room.roomId)}
+                      className="rounded border border-red-300 px-3 py-2 text-xs text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
+                    >
+                      Delete
                     </button>
                   )}
                   <button
@@ -100,13 +108,14 @@ export default function GroupsClient() {
   const [newGroupName, setNewGroupName] = useState("");
 
   const openCall = (roomId: string) => {
-    router.push(`/chat?room=${roomId}&mode=call`);
+    router.push(`/calls/${roomId}`);
   };
 
   const {
     identity,
     rooms,
     inviteLink,
+    inviteRoomId,
     roomError,
     callError,
     creatingRoom,
@@ -115,8 +124,9 @@ export default function GroupsClient() {
     createInvite,
     createCallInvite,
     leaveGroup,
+    deleteCall,
     copyInvite,
-  } = useRoomManager({ onOpenCall: openCall });
+  } = useRoomManager({ onOpenCall: openCall, openCallOnInvite: false });
 
   const groups = useMemo(
     () => rooms.filter((room) => room.kind !== "direct-call"),
@@ -192,6 +202,7 @@ export default function GroupsClient() {
               onOpenRoom={openRoom}
               onCreateInvite={(roomId) => void createInvite(roomId)}
               onLeaveRoom={(roomId) => void leaveGroup(roomId)}
+              onDeleteCall={(roomId) => void deleteCall(roomId)}
             />
 
             <RoomSection
@@ -199,20 +210,31 @@ export default function GroupsClient() {
               rooms={calls}
               emptyText="No active call rooms yet."
               onOpenRoom={openRoom}
-              onCreateInvite={(roomId) => void createInvite(roomId)}
+              onCreateInvite={(roomId) => void createInvite(roomId, "direct-call")}
               onLeaveRoom={(roomId) => void leaveGroup(roomId)}
+              onDeleteCall={(roomId) => void deleteCall(roomId)}
             />
           </div>
 
           <aside className="space-y-4">
             {callError && <div className="text-sm text-red-600">{callError}</div>}
             {inviteLink ? (
-              <InviteLinkBox
-                inviteLink={inviteLink}
-                onCopy={() => {
-                  void copyInvite();
-                }}
-              />
+              <>
+                <InviteLinkBox
+                  inviteLink={inviteLink}
+                  onCopy={() => {
+                    void copyInvite();
+                  }}
+                />
+                {inviteRoomId && (
+                  <button
+                    onClick={() => openCall(inviteRoomId)}
+                    className="w-full rounded bg-neutral-950 px-4 py-2 text-sm text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                  >
+                    Open call
+                  </button>
+                )}
+              </>
             ) : (
               <div className="rounded border border-neutral-200 bg-white p-4 text-sm text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
                 Invite links appear here after you create one.

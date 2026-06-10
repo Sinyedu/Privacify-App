@@ -19,6 +19,7 @@ import { getCorsOrigin } from '../config/cors';
 import {
   ChatRoomCommandService,
   CreateCallResult,
+  DeleteCallResult,
   CreateInviteResult,
   CreateRoomResult,
   LeaveGroupResult,
@@ -351,19 +352,37 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    await Promise.all([
-      this.inviteService.deleteByRoomId(data.roomId),
-      this.messageService.deleteByRoom(data.roomId),
-      this.roomService.deleteByRoomId(data.roomId),
-    ]);
-
     this.server.to(data.roomId).emit('call_ended', {
       roomId: data.roomId,
       endedBy: identity.username,
     });
+  }
 
-    this.server.emit('room_deleted', {
-      roomId: data.roomId,
-    });
+  @SubscribeMessage('delete_call')
+  async deleteCall(
+    @MessageBody() data: { roomId: string },
+    @ConnectedSocket() client: Socket,
+    @Ack() ack?: SocketAck<DeleteCallResult>,
+  ) {
+    const identity = this.signalingService.getIdentity(client);
+    if (!identity) {
+      const message = 'Missing socket identity. Reconnect and try again.';
+      ack?.({ ok: false, message });
+      return;
+    }
+
+    const result = await this.roomCommands.deleteOwnCall(identity, data);
+
+    if (result.ok) {
+      this.server.to(result.roomId).emit('call_ended', {
+        roomId: result.roomId,
+        endedBy: identity.username,
+      });
+      this.server.emit('room_deleted', {
+        roomId: result.roomId,
+      });
+    }
+
+    ack?.(result);
   }
 }

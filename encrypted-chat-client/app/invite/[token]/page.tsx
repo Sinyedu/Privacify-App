@@ -49,8 +49,12 @@ export default function InvitePage() {
           return;
         }
 
-        const mode = data.intent === "direct-call" ? "&mode=call" : "";
-        router.push(`/chat?room=${data.roomId}${mode}`);
+        if (data.intent === "direct-call") {
+          router.push(`/calls/${data.roomId}`);
+          return;
+        }
+
+        router.push(`/chat?room=${data.roomId}`);
       } catch (err) {
         console.error(err);
         alert("Failed to join room");

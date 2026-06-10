@@ -4,8 +4,9 @@ type RoomListProps = {
   rooms: Room[];
   currentRoom: string | null;
   onJoinRoom: (room: Room) => void;
-  onCreateInvite: (roomId: string) => void;
+  onCreateInvite: (room: Room) => void;
   onLeaveRoom?: (roomId: string) => void;
+  onDeleteCall?: (roomId: string) => void;
 };
 
 export default function RoomList({
@@ -14,6 +15,7 @@ export default function RoomList({
   onJoinRoom,
   onCreateInvite,
   onLeaveRoom,
+  onDeleteCall,
 }: RoomListProps) {
   return (
     <div className="space-y-2">
@@ -46,30 +48,36 @@ export default function RoomList({
             </span>
           </button>
 
-          {room.kind !== "direct-call" && (
-            <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => onCreateInvite(room)}
+              className={[
+                "text-xs",
+                currentRoom === room.roomId ? "text-blue-200" : "text-blue-500",
+              ].join(" ")}
+            >
+              invite
+            </button>
+            {room.kind !== "direct-call" && onLeaveRoom && (
               <button
-                onClick={() => onCreateInvite(room.roomId)}
+                onClick={() => onLeaveRoom(room.roomId)}
                 className={[
                   "text-xs",
-                  currentRoom === room.roomId ? "text-blue-200" : "text-blue-500",
-                ].join(" ")}
-              >
-                invite
+                  currentRoom === room.roomId ? "text-red-200" : "text-red-600",
+              ].join(" ")}
+            >
+                leave
               </button>
-              {onLeaveRoom && (
-                <button
-                  onClick={() => onLeaveRoom(room.roomId)}
-                  className={[
-                    "text-xs",
-                    currentRoom === room.roomId ? "text-red-200" : "text-red-600",
-                  ].join(" ")}
-                >
-                  leave
-                </button>
-              )}
-            </div>
-          )}
+            )}
+            {room.kind === "direct-call" && onDeleteCall && (
+              <button
+                onClick={() => onDeleteCall(room.roomId)}
+                className="text-xs text-red-600"
+              >
+                delete
+              </button>
+            )}
+          </div>
         </div>
       ))}
     </div>

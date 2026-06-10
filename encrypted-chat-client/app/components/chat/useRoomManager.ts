@@ -12,16 +12,19 @@ type UseRoomManagerOptions = {
   onOpenGroup?: (roomId: string) => void;
   onOpenCall?: (roomId: string) => void;
   onLeaveGroup?: (roomId: string) => void;
+  openCallOnInvite?: boolean;
 };
 
 export function useRoomManager({
   onOpenGroup,
   onOpenCall,
   onLeaveGroup,
+  openCallOnInvite = true,
 }: UseRoomManagerOptions = {}) {
   const { identity } = useIdentity();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteRoomId, setInviteRoomId] = useState<string | null>(null);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
   const [creatingRoom, setCreatingRoom] = useState(false);
@@ -43,14 +46,18 @@ export function useRoomManager({
       const inviteUrl = buildInviteUrl(link, roomKey);
 
       setInviteLink(inviteUrl);
+      setInviteRoomId(roomId);
 
       if (intent === "direct-call") {
         setCreatingCall(false);
         setCallError(null);
-        onOpenCall?.(roomId);
+
+        if (openCallOnInvite) {
+          onOpenCall?.(roomId);
+        }
       }
     },
-    [onOpenCall],
+    [onOpenCall, openCallOnInvite],
   );
 
   useEffect(() => {
@@ -159,7 +166,7 @@ export function useRoomManager({
   );
 
   const createInvite = useCallback(
-    async (roomId: string) => {
+    async (roomId: string, intent: "group" | "direct-call" = "group") => {
       if (!identity) return;
 
       setRoomError(null);
@@ -169,7 +176,7 @@ export function useRoomManager({
 
         const response = await emitWithAck<{ invite: InviteCreatedPayload }>(
           "create_invite",
-          { roomId, intent: "group" },
+          { roomId, intent },
         );
 
         if (!response.ok) {
@@ -254,6 +261,38 @@ export function useRoomManager({
     [identity, onLeaveGroup],
   );
 
+  const deleteCall = useCallback(
+    async (roomId: string) => {
+      if (!identity) return false;
+
+      setCallError(null);
+
+      try {
+        await connectSocket(identity);
+
+        const response = await emitWithAck<{ roomId: string }>("delete_call", {
+          roomId,
+        });
+
+        if (!response.ok) {
+          throw new Error(response.message || "Could not delete the call.");
+        }
+
+        setRooms((prev) => prev.filter((room) => room.roomId !== response.roomId));
+        return true;
+      } catch (error) {
+        console.error("[UI] delete call failed:", error);
+        setCallError(
+          error instanceof Error
+            ? error.message
+            : "Could not connect to delete the call.",
+        );
+        return false;
+      }
+    },
+    [identity],
+  );
+
   const copyInvite = useCallback(async () => {
     if (!inviteLink) return;
 
@@ -264,6 +303,7 @@ export function useRoomManager({
     identity,
     rooms,
     inviteLink,
+    inviteRoomId,
     roomError,
     callError,
     creatingRoom,
@@ -272,6 +312,7 @@ export function useRoomManager({
     createInvite,
     createCallInvite,
     leaveGroup,
+    deleteCall,
     copyInvite,
   };
 }
