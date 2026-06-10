@@ -7,7 +7,14 @@ import { socket } from "@/core/socket/socket";
 import { useChatStore } from "@/core/store/chat-store";
 import type { EncryptedPeerMessage } from "@/core/webrtc/types";
 
-export function useRoomMessages(roomId: string) {
+type UseRoomMessagesOptions = {
+  callEndedRedirect?: string;
+};
+
+export function useRoomMessages(
+  roomId: string,
+  { callEndedRedirect = "/chat" }: UseRoomMessagesOptions = {},
+) {
   const router = useRouter();
 
   const addEncryptedMessage = useCallback(
@@ -48,7 +55,7 @@ export function useRoomMessages(roomId: string) {
     socket.on("connect", onConnect);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    socket.on("chat_history", (messages: any[]) => {
+    const handleChatHistory = (messages: any[]) => {
       messages.forEach((msg) => {
         void addEncryptedMessage({
           id: String(msg._id),
@@ -57,33 +64,39 @@ export function useRoomMessages(roomId: string) {
           sender: msg.sender,
         });
       });
-    });
+    };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    socket.on("receive_message", (msg: any) => {
+    const handleReceiveMessage = (msg: any) => {
       void addEncryptedMessage({
         id: msg.id ?? msg._id ?? crypto.randomUUID(),
         roomId: msg.roomId ?? roomId,
         encrypted: msg.text,
         sender: msg.sender,
       });
-    });
+    };
 
-    socket.on("room_join_blocked", () => {
+    const handleRoomJoinBlocked = () => {
       alert("That room is not available.");
       router.push("/chat");
-    });
+    };
 
-    socket.on("call_ended", () => {
+    const handleCallEnded = () => {
       alert("The call has ended.");
-      router.push("/chat");
-    });
+      router.push(callEndedRedirect);
+    };
 
-    socket.on("room_deleted", ({ roomId: deletedRoomId }: { roomId: string }) => {
+    const handleRoomDeleted = ({ roomId: deletedRoomId }: { roomId: string }) => {
       if (deletedRoomId === roomId) {
         router.push("/chat");
       }
-    });
+    };
+
+    socket.on("chat_history", handleChatHistory);
+    socket.on("receive_message", handleReceiveMessage);
+    socket.on("room_join_blocked", handleRoomJoinBlocked);
+    socket.on("call_ended", handleCallEnded);
+    socket.on("room_deleted", handleRoomDeleted);
 
     if (socket.connected) {
       socket.emit("join_room", { roomId });
@@ -91,14 +104,14 @@ export function useRoomMessages(roomId: string) {
 
     return () => {
       socket.off("connect", onConnect);
-      socket.off("chat_history");
-      socket.off("receive_message");
-      socket.off("room_join_blocked");
-      socket.off("call_ended");
-      socket.off("room_deleted");
+      socket.off("chat_history", handleChatHistory);
+      socket.off("receive_message", handleReceiveMessage);
+      socket.off("room_join_blocked", handleRoomJoinBlocked);
+      socket.off("call_ended", handleCallEnded);
+      socket.off("room_deleted", handleRoomDeleted);
       socket.emit("leave_room", { roomId });
     };
-  }, [addEncryptedMessage, roomId, router]);
+  }, [addEncryptedMessage, callEndedRedirect, roomId, router]);
 
   useEffect(() => {
     return onRoomKeyImported((importedRoomId) => {

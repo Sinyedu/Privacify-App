@@ -19,8 +19,11 @@ type CallClientProps = {
 export default function CallClient({ roomId }: CallClientProps) {
   const router = useRouter();
   const { identity } = useIdentity();
-  const { addEncryptedMessage } = useRoomMessages(roomId);
+  const { addEncryptedMessage } = useRoomMessages(roomId, {
+    callEndedRedirect: "/groups",
+  });
   const { localStream, error: mediaError } = useCallMedia(Boolean(roomId));
+  const canStartRtc = Boolean(localStream);
   const [remoteStreamState, setRemoteStreamState] = useState<{
     roomId: string;
     streams: Map<string, MediaStream>;
@@ -49,7 +52,7 @@ export default function CallClient({ roomId }: CallClientProps) {
   const { peerCount, broadcastMessage } = useRoomWebRtc({
     socket,
     roomId,
-    identity,
+    identity: canStartRtc ? identity : null,
     localStream,
     onMessage: addEncryptedMessage,
     onRemoteStream: handleRemoteStream,
@@ -77,7 +80,10 @@ export default function CallClient({ roomId }: CallClientProps) {
               localStream={localStream}
               remoteStreams={remoteStreams}
               peerCount={peerCount}
-              error={mediaError}
+              error={
+                mediaError ||
+                (!canStartRtc ? "Waiting for camera and microphone access..." : null)
+              }
               onEndCall={endCall}
             />
           </main>

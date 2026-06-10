@@ -53,9 +53,13 @@ export class PeerConnection {
     };
 
     this.connection.ontrack = (event) => {
-      event.streams[0]?.getTracks().forEach((track) => {
-        this.remoteStream.addTrack(track);
-      });
+      if (event.streams[0]) {
+        event.streams[0].getTracks().forEach((track) => {
+          this.addRemoteTrack(track);
+        });
+      } else {
+        this.addRemoteTrack(event.track);
+      }
 
       this.options.onRemoteStream?.(this.options.peerId, this.remoteStream);
     };
@@ -137,6 +141,13 @@ export class PeerConnection {
       this.options.onDataMessage(JSON.parse(event.data) as PeerDataMessage);
     };
     channel.onclose = this.options.onClose;
+  }
+
+  private addRemoteTrack(track: MediaStreamTrack) {
+    const exists = this.remoteStream.getTracks().some((item) => item.id === track.id);
+    if (exists) return;
+
+    this.remoteStream.addTrack(track);
   }
 
   private async addIceCandidate(candidate: RTCIceCandidateInit) {

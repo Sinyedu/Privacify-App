@@ -18,17 +18,20 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       console.error("[socket] failed to connect:", error);
     });
 
-    socket.on("connect", () => {
+    const handleConnect = () => {
       console.log("[socket] connected:", socket.id);
-    });
+    };
 
-    socket.on("disconnect", () => {
+    const handleDisconnect = () => {
       console.log("[socket] disconnected");
-    });
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
 
     return () => {
-      socket.off("connect");
-      socket.off("disconnect");
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
     };
   }, [identity]);
 

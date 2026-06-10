@@ -14,6 +14,7 @@ function VideoTile({ label, muted = false, stream }: VideoTileProps) {
   useEffect(() => {
     if (!videoRef.current) return;
     videoRef.current.srcObject = stream;
+    void videoRef.current.play().catch(() => undefined);
   }, [stream]);
 
   return (
