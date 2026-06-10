@@ -12,6 +12,18 @@ type CreateRoomInput = {
   owner: RoomMember;
 };
 
+type LeaveMemberResult =
+  | {
+      left: true;
+      deleted: boolean;
+      roomId: string;
+    }
+  | {
+      left: false;
+      deleted: false;
+      roomId: string;
+    };
+
 @Injectable()
 export class RoomService {
   constructor(
@@ -80,5 +92,45 @@ export class RoomService {
       { $push: { members: member } },
       { new: true },
     );
+  }
+
+  async removeMember(
+    roomId: string,
+    userId: string,
+  ): Promise<LeaveMemberResult> {
+    const room = await this.findByRoomId(roomId);
+
+    if (!room || room.kind === 'direct-call') {
+      return { left: false, deleted: false, roomId };
+    }
+
+    const members = (room.members ?? []).filter(
+      (member) => member.userId !== userId,
+    );
+    const wasMember =
+      room.ownerId === userId || members.length !== (room.members ?? []).length;
+
+    if (!wasMember) {
+      return { left: false, deleted: false, roomId };
+    }
+
+    if (members.length === 0) {
+      await this.deleteByRoomId(roomId);
+      return { left: true, deleted: true, roomId };
+    }
+
+    const ownerId = room.ownerId === userId ? members[0].userId : room.ownerId;
+
+    await this.roomModel.updateOne(
+      { roomId },
+      {
+        $set: {
+          ownerId,
+          members,
+        },
+      },
+    );
+
+    return { left: true, deleted: false, roomId };
   }
 }

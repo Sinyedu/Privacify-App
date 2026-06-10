@@ -5,6 +5,7 @@ type RoomListProps = {
   currentRoom: string | null;
   onJoinRoom: (room: Room) => void;
   onCreateInvite: (roomId: string) => void;
+  onLeaveRoom?: (roomId: string) => void;
 };
 
 export default function RoomList({
@@ -12,6 +13,7 @@ export default function RoomList({
   currentRoom,
   onJoinRoom,
   onCreateInvite,
+  onLeaveRoom,
 }: RoomListProps) {
   return (
     <div className="space-y-2">
@@ -27,30 +29,46 @@ export default function RoomList({
               : "border-transparent hover:bg-gray-100",
           ].join(" ")}
         >
-          <span onClick={() => onJoinRoom(room)} className="min-w-0">
-            {room.name}
-            {room.kind === "direct-call" && (
-              <span
-                className={[
-                  "ml-2 text-[10px] uppercase",
-                  currentRoom === room.roomId ? "text-red-300" : "text-gray-500",
-                ].join(" ")}
-              >
-                call
-              </span>
-            )}
-          </span>
-
-          {room.kind !== "direct-call" && (
-            <button
-              onClick={() => onCreateInvite(room.roomId)}
+          <button
+            onClick={() => onJoinRoom(room)}
+            className="min-w-0 text-left"
+          >
+            <span className="block truncate text-sm">{room.name}</span>
+            <span
               className={[
-                "text-xs",
-                currentRoom === room.roomId ? "text-blue-200" : "text-blue-500",
+                "block text-[11px]",
+                currentRoom === room.roomId ? "text-neutral-300" : "text-gray-500",
               ].join(" ")}
             >
-              invite
-            </button>
+              {room.kind === "direct-call"
+                ? "call"
+                : `${room.members?.length ?? 0} members`}
+            </span>
+          </button>
+
+          {room.kind !== "direct-call" && (
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={() => onCreateInvite(room.roomId)}
+                className={[
+                  "text-xs",
+                  currentRoom === room.roomId ? "text-blue-200" : "text-blue-500",
+                ].join(" ")}
+              >
+                invite
+              </button>
+              {onLeaveRoom && (
+                <button
+                  onClick={() => onLeaveRoom(room.roomId)}
+                  className={[
+                    "text-xs",
+                    currentRoom === room.roomId ? "text-red-200" : "text-red-600",
+                  ].join(" ")}
+                >
+                  leave
+                </button>
+              )}
+            </div>
           )}
         </div>
       ))}

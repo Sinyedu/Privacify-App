@@ -179,7 +179,7 @@ export default function ChatClient() {
         )}
         {roomId ? (
           <>
-            <MessageList />
+            <MessageList currentUsername={identity?.username} />
             <MessageInput roomId={roomId} onEncryptedMessage={broadcastMessage} />
           </>
         ) : (

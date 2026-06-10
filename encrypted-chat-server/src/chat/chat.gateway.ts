@@ -21,6 +21,7 @@ import {
   CreateCallResult,
   CreateInviteResult,
   CreateRoomResult,
+  LeaveGroupResult,
 } from './chat-room-command.service';
 
 type SocketAck<T> = (response: T) => void;
@@ -173,6 +174,40 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.signalingService.leaveRoom(client, data.roomId);
   }
 
+  @SubscribeMessage('leave_group')
+  async leaveGroup(
+    @MessageBody() data: { roomId: string },
+    @ConnectedSocket() client: Socket,
+    @Ack() ack?: SocketAck<LeaveGroupResult>,
+  ) {
+    const identity = this.signalingService.getIdentity(client);
+    if (!identity) {
+      const message = 'Missing socket identity. Reconnect and try again.';
+      ack?.({ ok: false, message });
+      return;
+    }
+
+    const result = await this.roomCommands.leaveGroup(identity, data);
+
+    if (!result.ok) {
+      ack?.(result);
+      return;
+    }
+
+    this.signalingService.leaveRoom(client, data.roomId);
+    client.emit('room_left', {
+      roomId: result.roomId,
+    });
+
+    if (result.deleted) {
+      this.server.emit('room_deleted', {
+        roomId: result.roomId,
+      });
+    }
+
+    ack?.(result);
+  }
+
   @SubscribeMessage('webrtc_signal')
   forwardWebRtcSignal(
     @MessageBody()
@@ -195,6 +230,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         roomId: r.roomId,
         name: r.name,
         kind: r.kind ?? 'group',
+        members: r.members ?? [],
       })),
     );
   }

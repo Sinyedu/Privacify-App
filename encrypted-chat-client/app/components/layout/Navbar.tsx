@@ -1,12 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const pathname = usePathname();
 
   const displayName = user?.username;
+  const linkClass = (href: string) =>
+    [
+      "rounded px-2 py-1 text-sm",
+      pathname === href
+        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+        : "hover:bg-zinc-200 dark:hover:bg-zinc-800",
+    ].join(" ");
 
   const handleLogout = () => {
     logout();
@@ -23,11 +32,11 @@ export default function Navbar() {
 
         {user && (
           <>
-            <Link href="/chat" className="hover:underline">
+            <Link href="/chat" className={linkClass("/chat")}>
               Chats
             </Link>
 
-            <Link href="/groups" className="hover:underline">
+            <Link href="/groups" className={linkClass("/groups")}>
               Groups
             </Link>
           </>

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { InviteService } from '../invite/invite.service';
+import { MessageService } from '../messages/message.service';
 import { RoomService } from '../room/room.service';
 import type { Identity } from './chat.types';
 
@@ -8,6 +9,11 @@ export type RoomCreatedPayload = {
   roomId: string;
   name: string;
   kind: 'group' | 'direct-call';
+  members: {
+    userId: string;
+    username: string;
+    type: 'auth';
+  }[];
 };
 
 export type InviteCreatedPayload = {
@@ -47,10 +53,22 @@ export type CreateCallResult =
       message: string;
     };
 
+export type LeaveGroupResult =
+  | {
+      ok: true;
+      roomId: string;
+      deleted: boolean;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
 @Injectable()
 export class ChatRoomCommandService {
   constructor(
     private readonly inviteService: InviteService,
+    private readonly messageService: MessageService,
     private readonly roomService: RoomService,
   ) {}
 
@@ -76,6 +94,7 @@ export class ChatRoomCommandService {
         roomId: room.roomId,
         name: room.name,
         kind: room.kind,
+        members: room.members ?? [],
       },
     };
   }
@@ -131,6 +150,7 @@ export class ChatRoomCommandService {
       roomId: room.roomId,
       name: room.name,
       kind: room.kind,
+      members: room.members ?? [],
     };
 
     return {
@@ -141,6 +161,37 @@ export class ChatRoomCommandService {
         intent: 'direct-call',
         link: `/invite/${token}`,
       },
+    };
+  }
+
+  async leaveGroup(
+    identity: Identity,
+    data: { roomId: string },
+  ): Promise<LeaveGroupResult> {
+    if (!data.roomId?.trim()) {
+      return { ok: false, message: 'Missing group id.' };
+    }
+
+    const result = await this.roomService.removeMember(
+      data.roomId,
+      identity.userId,
+    );
+
+    if (!result.left) {
+      return { ok: false, message: 'Could not leave this group.' };
+    }
+
+    if (result.deleted) {
+      await Promise.all([
+        this.inviteService.deleteByRoomId(data.roomId),
+        this.messageService.deleteByRoom(data.roomId),
+      ]);
+    }
+
+    return {
+      ok: true,
+      roomId: result.roomId,
+      deleted: result.deleted,
     };
   }
 }
