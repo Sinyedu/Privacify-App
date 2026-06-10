@@ -67,6 +67,7 @@ export function useRoomWebRtc({
       socket.off("peer_left", session.handlePeerLeft);
       session.close();
       sessionRef.current = null;
+      socket.emit("leave_room", { roomId });
     };
   }, [identity, isConnected, onMessage, onRemoteStream, roomId, socket]);
 

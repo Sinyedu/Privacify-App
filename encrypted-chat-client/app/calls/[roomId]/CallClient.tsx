@@ -21,6 +21,7 @@ export default function CallClient({ roomId }: CallClientProps) {
   const { identity } = useIdentity();
   const { addEncryptedMessage } = useRoomMessages(roomId, {
     callEndedRedirect: "/groups",
+    joinRoom: false,
   });
   const { localStream, error: mediaError } = useCallMedia(Boolean(roomId));
   const canStartRtc = Boolean(localStream);

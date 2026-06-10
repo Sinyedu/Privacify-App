@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type VideoTileProps = {
   label: string;
@@ -10,22 +10,41 @@ type VideoTileProps = {
 
 function VideoTile({ label, muted = false, stream }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [playBlocked, setPlayBlocked] = useState(false);
 
   useEffect(() => {
     if (!videoRef.current) return;
     videoRef.current.srcObject = stream;
-    void videoRef.current.play().catch(() => undefined);
+    void videoRef.current
+      .play()
+      .then(() => setPlayBlocked(false))
+      .catch(() => setPlayBlocked(Boolean(stream)));
   }, [stream]);
 
+  const play = () => {
+    if (!videoRef.current) return;
+
+    void videoRef.current.play().then(() => setPlayBlocked(false));
+  };
+
   return (
-    <div className="min-h-48 bg-neutral-950 text-white overflow-hidden rounded">
+    <div className="relative min-h-48 bg-neutral-950 text-white overflow-hidden rounded">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted={muted}
+        controls={!muted}
         className="h-48 w-full object-cover bg-neutral-900"
       />
+      {playBlocked && (
+        <button
+          onClick={play}
+          className="absolute inset-x-4 top-16 rounded bg-white px-3 py-2 text-sm text-neutral-950 shadow"
+        >
+          Play video/audio
+        </button>
+      )}
       <div className="px-3 py-2 text-xs text-neutral-300">{label}</div>
     </div>
   );

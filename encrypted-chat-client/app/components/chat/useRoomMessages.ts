@@ -9,11 +9,12 @@ import type { EncryptedPeerMessage } from "@/core/webrtc/types";
 
 type UseRoomMessagesOptions = {
   callEndedRedirect?: string;
+  joinRoom?: boolean;
 };
 
 export function useRoomMessages(
   roomId: string,
-  { callEndedRedirect = "/chat" }: UseRoomMessagesOptions = {},
+  { callEndedRedirect = "/chat", joinRoom = true }: UseRoomMessagesOptions = {},
 ) {
   const router = useRouter();
 
@@ -49,6 +50,7 @@ export function useRoomMessages(
     useChatStore.getState().clearMessages();
 
     const onConnect = () => {
+      if (!joinRoom) return;
       socket.emit("join_room", { roomId });
     };
 
@@ -98,7 +100,7 @@ export function useRoomMessages(
     socket.on("call_ended", handleCallEnded);
     socket.on("room_deleted", handleRoomDeleted);
 
-    if (socket.connected) {
+    if (joinRoom && socket.connected) {
       socket.emit("join_room", { roomId });
     }
 
@@ -109,9 +111,11 @@ export function useRoomMessages(
       socket.off("room_join_blocked", handleRoomJoinBlocked);
       socket.off("call_ended", handleCallEnded);
       socket.off("room_deleted", handleRoomDeleted);
-      socket.emit("leave_room", { roomId });
+      if (joinRoom) {
+        socket.emit("leave_room", { roomId });
+      }
     };
-  }, [addEncryptedMessage, callEndedRedirect, roomId, router]);
+  }, [addEncryptedMessage, callEndedRedirect, joinRoom, roomId, router]);
 
   useEffect(() => {
     return onRoomKeyImported((importedRoomId) => {
